@@ -1,14 +1,11 @@
 // src/context/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 
 // 1️⃣ Create context
 const AuthContext = createContext();
 
 // 2️⃣ AuthProvider component
 export const AuthProvider = ({ children }) => {
-  const navigate = useNavigate();
-
   const [user, setUser] = useState({
     token: null,
     role: null,
@@ -28,27 +25,28 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  // 4️⃣ Login function
+  // 4️⃣ Login function - navigation will be handled by the component calling this
   const login = ({ token, role, name }) => {
     localStorage.setItem("token", token);
     localStorage.setItem("role", role);
-    localStorage.setItem("name", name);
+    localStorage.setItem("name", name || "");
 
-    setUser({ token, role, name });
+    setUser({ token, role, name: name || "" });
 
-    // Redirect based on role
-    if (role === "admin") navigate("/admin");
-    else navigate("/dashboard");
+    // Return the redirect path so the calling component can handle navigation
+    return role === "admin" ? "/admin" : "/dashboard";
   };
 
-  // 5️⃣ Logout function
+  // 5️⃣ Logout function - navigation will be handled by the component calling this
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
     localStorage.removeItem("name");
 
     setUser({ token: null, role: null, name: null });
-    navigate("/login");
+    
+    // Return the redirect path
+    return "/login";
   };
 
   return (

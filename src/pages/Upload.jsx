@@ -135,9 +135,10 @@ function Upload() {
             formData.append("paymentId", response.razorpay_payment_id);
             
             // Upload to backend
+            const token = localStorage.getItem("token");
             const uploadRes = await axios.post("http://localhost:5000/api/upload", formData, {
               headers: {
-                "Authorization": localStorage.getItem("token"),
+                "Authorization": token ? `Bearer ${token}` : "",
                 "Content-Type": "multipart/form-data"
               }
             });
@@ -200,76 +201,119 @@ function Upload() {
   };
 
   return (
-    <div className="min-h-screen flex justify-center items-center bg-gradient-to-b from-blue-50 to-white px-4">
-      <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md">
-        <h2 className="text-3xl font-extrabold text-blue-600 mb-6 text-center">🖨️ Upload Documents</h2>
-        <form onSubmit={handleUpload} className="space-y-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-12 px-4">
+      <div className="max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-6 md:mb-8 animate-fade-in">
+          <div className="inline-flex items-center justify-center w-12 h-12 md:w-16 md:h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl mb-3 md:mb-4 shadow-lg">
+            <svg className="text-white" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </div>
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2 md:mb-3 px-2">
+            Upload Documents
+          </h2>
+          <p className="text-gray-600 text-base md:text-lg px-2">Upload your files and customize print settings</p>
+        </div>
+
+      <div className="bg-white rounded-xl md:rounded-2xl shadow-2xl border border-gray-100 p-4 md:p-6 lg:p-8 animate-scale-in">
+        <form onSubmit={handleUpload} className="space-y-6">
           <div>
-            <input 
-              type="file" 
-              accept=".pdf,.docx,.jpg,.png" 
-              onChange={handleFileChange} 
-              multiple
-              className="w-full border border-gray-300 p-2 rounded-md"
-            />
+            <label className="block text-sm font-semibold text-gray-700 mb-3">
+              Select Files (PDF, DOCX, JPG, PNG)
+            </label>
+            <div className="relative">
+              <input 
+                type="file" 
+                accept=".pdf,.docx,.jpg,.png" 
+                onChange={handleFileChange} 
+                multiple
+                className="w-full border-2 border-dashed border-gray-300 rounded-xl p-6 hover:border-blue-400 transition-colors cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+            </div>
             {files.length > 0 && (
-              <div className="mt-3 space-y-2">
-                <p className="text-sm font-semibold text-gray-700">Selected Files ({files.length}):</p>
+              <div className="mt-6 space-y-3">
+                <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                  </svg>
+                  Selected Files ({files.length})
+                </p>
                 {files.map((file, index) => (
-                  <div key={index} className="bg-gray-50 p-2 rounded border space-y-2">
+                  <div key={index} className="bg-gradient-to-br from-gray-50 to-blue-50 p-4 rounded-xl border border-gray-200 hover:border-blue-300 transition-all space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm truncate flex-1">{file.name}</span>
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="bg-blue-100 p-2 rounded-lg">
+                          <svg className="text-blue-600" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                          </svg>
+                        </div>
+                        <span className="text-sm font-medium text-gray-800 truncate">{file.name}</span>
+                      </div>
                       <button
                         type="button"
                         onClick={() => removeFile(index)}
-                        className="text-red-500 hover:text-red-700 ml-2"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-all ml-2"
                       >
-                        ✕
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
                       </button>
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="flex items-center gap-1">
-                          <label className="text-xs text-gray-600">Pages:</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={filePages[index] || 1}
-                          onChange={(e) => handlePagesChange(index, e.target.value)}
-                          className="border p-1 rounded w-16 text-sm"
-                        />
+                    <div className="space-y-2 md:space-y-3 pt-2 border-t border-gray-200">
+                      <div className="grid grid-cols-2 gap-2 md:gap-3">
+                        <div>
+                          <label className="text-[10px] md:text-xs font-semibold text-gray-600 mb-1 block">Pages</label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={filePages[index] || 1}
+                            onChange={(e) => handlePagesChange(index, e.target.value)}
+                            className="w-full border-2 border-gray-200 p-1.5 md:p-2 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-xs md:text-sm"
+                          />
                         </div>
-                        <div className="flex items-center gap-1">
-                          <label className="text-xs text-gray-600">Copies:</label>
+                        <div>
+                          <label className="text-[10px] md:text-xs font-semibold text-gray-600 mb-1 block">Copies</label>
                           <input
                             type="number"
                             min="1"
                             value={fileCopies[index] || 1}
                             onChange={(e) => handleCopiesChange(index, e.target.value)}
-                            className="border p-1 rounded w-16 text-sm"
+                            className="w-full border-2 border-gray-200 p-1.5 md:p-2 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-xs md:text-sm"
                           />
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <select 
-                          value={fileColor[index] || "color"} 
-                          onChange={(e) => handleColorChange(index, e.target.value)} 
-                          className="border p-1 rounded text-xs w-24"
-                        >
-                          <option value="color">Color ₹5</option>
-                          <option value="bw">B&W ₹2</option>
-                        </select>
-                        <label className="flex items-center gap-1 text-xs">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 md:gap-3">
+                        <div className="flex-1 w-full sm:w-auto min-w-[120px]">
+                          <label className="text-[10px] md:text-xs font-semibold text-gray-600 mb-1 block">Print Type</label>
+                          <select 
+                            value={fileColor[index] || "color"} 
+                            onChange={(e) => handleColorChange(index, e.target.value)} 
+                            className="w-full border-2 border-gray-200 p-1.5 md:p-2 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-xs md:text-sm"
+                          >
+                            <option value="color">Color ₹5/page</option>
+                            <option value="bw">B&W ₹2/page</option>
+                          </select>
+                        </div>
+                        <label className="flex items-center gap-2 mt-4 sm:mt-6 cursor-pointer">
                           <input 
                             type="checkbox" 
                             checked={fileDoubleSided[index] || false}
-                            onChange={(e) => handleDoubleSidedChange(index, e.target.checked)} 
+                            onChange={(e) => handleDoubleSidedChange(index, e.target.checked)}
+                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                           />
-                          <span>2-Sided</span>
+                          <span className="text-xs md:text-sm font-medium text-gray-700">2-Sided</span>
                         </label>
-                        <span className="text-xs font-semibold text-blue-800">
-                          = ₹{((filePages[index] || 1) * (fileCopies[index] || 1) * ((fileColor[index] || "color") === "color" ? 5 : 2))}
-                        </span>
+                        <div className="bg-blue-100 px-3 md:px-4 py-1.5 md:py-2 rounded-lg w-full sm:w-auto sm:ml-auto">
+                          <span className="text-xs md:text-sm font-bold text-blue-700">
+                            ₹{((filePages[index] || 1) * (fileCopies[index] || 1) * ((fileColor[index] || "color") === "color" ? 5 : 2))}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -279,26 +323,54 @@ function Upload() {
           </div>
           
           {files.length > 0 && (
-            <div className="bg-blue-50 p-3 rounded-md">
-              <p className="text-sm font-semibold text-blue-800">
-                Total Amount: ₹{files.reduce((sum, file, index) => {
-                  const pages = filePages[index] || 1;
-                  const copies = fileCopies[index] || 1;
-                  const color = fileColor[index] || "color";
-                  const pricePerPage = color === "color" ? 5 : 2;
-                  return sum + (pages * copies * pricePerPage);
-                }, 0).toFixed(2)}
-              </p>
-              <p className="text-xs text-blue-600">
-                {files.length} file(s) × (Color: ₹5/page, B&W: ₹2/page)
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 md:p-6 rounded-xl text-white shadow-lg">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-2">
+                <span className="text-xs md:text-sm opacity-90">Total Amount</span>
+                <span className="text-2xl md:text-3xl font-bold">
+                  ₹{files.reduce((sum, file, index) => {
+                    const pages = filePages[index] || 1;
+                    const copies = fileCopies[index] || 1;
+                    const color = fileColor[index] || "color";
+                    const pricePerPage = color === "color" ? 5 : 2;
+                    return sum + (pages * copies * pricePerPage);
+                  }, 0).toFixed(2)}
+                </span>
+              </div>
+              <p className="text-[10px] md:text-xs opacity-75">
+                {files.length} file(s) • Color: ₹5/page • B&W: ₹2/page
               </p>
             </div>
           )}
           
-          <button type="submit" disabled={loading} className={`w-full py-2 rounded-2xl text-white font-semibold transition ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-105 transform"}`}>
-            {loading ? "Processing..." : "💳 Pay Online"}
+          <button 
+            type="submit" 
+            disabled={loading || files.length === 0} 
+            className={`w-full py-4 rounded-xl text-white font-semibold transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 ${
+              loading || files.length === 0
+                ? "bg-gray-400 cursor-not-allowed" 
+                : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-[1.02] transform"
+            }`}
+          >
+            {loading ? (
+              <>
+                <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Processing...
+              </>
+            ) : (
+              <>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                  <line x1="1" y1="10" x2="23" y2="10"></line>
+                </svg>
+                Proceed to Payment
+              </>
+            )}
           </button>
         </form>
+      </div>
       </div>
     </div>
   );

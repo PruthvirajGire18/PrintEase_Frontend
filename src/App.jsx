@@ -14,7 +14,7 @@ import "./App.css";
 
 function App() {
   return (
-    <>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       <Navbar />
       <Routes>
         <Route path="/" element={<Home />} />
@@ -64,7 +64,7 @@ function App() {
         {/* Unauthorized Access */}
         <Route path="/unauthorized" element={<Unauthorized />} />
       </Routes>
-    </>
+    </div>
   );
 }
 
