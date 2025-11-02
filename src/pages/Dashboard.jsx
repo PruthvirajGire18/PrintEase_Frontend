@@ -16,7 +16,7 @@ function Dashboard() {
           return;
         }
 
-        const res = await axios.get("http://localhost:5000/api/orders", {
+        const res = await axios.get("https://print-ease-backend-new-qlv6.vercel.app/api/orders", {
           headers: {
             Authorization: `Bearer ${token}`
           }

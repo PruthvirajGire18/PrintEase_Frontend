@@ -23,7 +23,7 @@ function Admin() {
   const fetchOrders = async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/api/admin/orders", {
+      const res = await axios.get("https://print-ease-backend-new-qlv6.vercel.app/api/admin/orders", {
         headers: {
           Authorization: token ? `Bearer ${token}` : ""
         }
@@ -49,7 +49,7 @@ function Admin() {
     try {
       setUpdatingId(id);
       const token = localStorage.getItem("token");
-      await axios.put(`http://localhost:5000/api/admin/orders/${id}/status`, 
+      await axios.put(`https://print-ease-backend-new-qlv6.vercel.app/api/admin/orders/${id}/status`, 
         { status },
         {
           headers: {
@@ -71,7 +71,7 @@ function Admin() {
     try {
       setUpdatingId(id);
       const token = localStorage.getItem("token");
-      await axios.delete(`http://localhost:5000/api/admin/orders/${id}`, {
+      await axios.delete(`https://print-ease-backend-new-qlv6.vercel.app/api/admin/orders/${id}`, {
         headers: {
           Authorization: token ? `Bearer ${token}` : ""
         }

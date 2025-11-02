@@ -25,7 +25,7 @@ function Track() {
       const encodedOrderNumber = encodeURIComponent(trimmedOrderNumber);
       console.log("🔍 Searching for order:", trimmedOrderNumber);
       
-      const res = await axios.get(`http://localhost:5000/api/track/${encodedOrderNumber}`);
+      const res = await axios.get(`https://print-ease-backend-new-qlv6.vercel.app/api/track/${encodedOrderNumber}`);
       
       console.log("📦 Response:", res.data);
       

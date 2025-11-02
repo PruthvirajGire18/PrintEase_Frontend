@@ -14,7 +14,7 @@ function Signup() {
     e.preventDefault();
     try {
       setLoading(true);
-      const res = await axios.post("http://localhost:5000/api/signup", { 
+      const res = await axios.post("https://print-ease-backend-new-qlv6.vercel.app/api/signup", { 
         name, 
         email, 
         password, 

@@ -15,7 +15,7 @@ function Login() {
     e.preventDefault();
     try {
       setLoading(true);
-      const res = await axios.post("http://localhost:5000/api/login", { email, password });
+      const res = await axios.post("https://print-ease-backend-new-qlv6.vercel.app/api/login", { email, password });
       console.log("Login response:", res.data);
       
       if (res.data.success && res.data.token && res.data.user) {

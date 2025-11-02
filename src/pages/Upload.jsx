@@ -136,7 +136,7 @@ function Upload() {
             
             // Upload to backend
             const token = localStorage.getItem("token");
-            const uploadRes = await axios.post("http://localhost:5000/api/upload", formData, {
+            const uploadRes = await axios.post("https://print-ease-backend-new-qlv6.vercel.app/api/upload", formData, {
               headers: {
                 "Authorization": token ? `Bearer ${token}` : "",
                 "Content-Type": "multipart/form-data"
