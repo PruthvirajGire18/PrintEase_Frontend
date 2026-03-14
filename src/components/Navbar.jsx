@@ -1,159 +1,191 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Menu, X, Upload, Search, LayoutDashboard, Shield, LogOut, User } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import {
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Search,
+  Shield,
+  Upload,
+  User,
+  X,
+} from "lucide-react";
+
 import { useAuth } from "../context/AuthContext";
+
+const navItemBase =
+  "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition";
 
 function Navbar() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuth();
-  const isLoggedIn = !!user.token;
+  const isLoggedIn = Boolean(user.token);
 
   const handleLogout = () => {
     const redirectPath = logout();
+    setOpen(false);
     navigate(redirectPath);
   };
 
+  const getLinkClassName = (path) =>
+    `${navItemBase} ${
+      location.pathname === path
+        ? "bg-white text-slate-950 shadow-lg"
+        : "text-slate-300 hover:bg-white/10 hover:text-white"
+    }`;
+
+  const commonLinks = isLoggedIn
+    ? [
+        { to: "/upload", icon: Upload, label: "Upload" },
+        { to: "/track", icon: Search, label: "Track" },
+      ]
+    : [];
+
+  const roleLinks =
+    user.role === "admin"
+      ? [{ to: "/admin", icon: Shield, label: "Admin" }]
+      : user.role === "user"
+        ? [{ to: "/dashboard", icon: LayoutDashboard, label: "Dashboard" }]
+        : [];
+
+  const allLinks = [...commonLinks, ...roleLinks];
+
   return (
-    <nav className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white shadow-2xl sticky top-0 z-50 w-full left-0 right-0">
-      <div className="max-w-7xl mx-auto px-4 md:px-6 flex justify-between items-center h-16 md:h-20 w-full">
-        <Link to="/" className="flex items-center gap-2 group">
-          <div className="bg-white bg-opacity-20 p-2 rounded-lg group-hover:bg-opacity-30 transition-all">
-            <Upload className="text-white" size={24} />
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/78 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 md:px-6">
+        <Link to="/" className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#2563eb,#4f46e5,#7c3aed)] text-white shadow-[0_12px_30px_rgba(79,70,229,0.35)]">
+            <Upload size={20} />
           </div>
-          <span className="text-xl md:text-2xl font-extrabold tracking-wide text-white">PrintEase</span>
+          <div>
+            <p className="text-lg font-black tracking-tight text-white md:text-xl">
+              PrintEase
+            </p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+              Online Print Ops
+            </p>
+          </div>
         </Link>
 
-        {/* Desktop Links */}
-        <div className="hidden md:flex items-center gap-2 font-semibold">
+        <nav className="hidden items-center gap-2 md:flex">
+          {allLinks.map((link) => {
+            const Icon = link.icon;
+            return (
+              <Link key={link.to} to={link.to} className={getLinkClassName(link.to)}>
+                <Icon size={16} />
+                {link.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="hidden items-center gap-3 md:flex">
           {!isLoggedIn ? (
-                        <Link
-                          to="/login"
-                          className="px-4 py-2 rounded-lg hover:bg-white hover:text-blue-600 transition-all duration-200 flex items-center gap-2 text-white"
-                        >              <User size={18} />
-              Login
-            </Link>
+            <>
+              <Link to="/login" className={`${navItemBase} secondary-btn`}>
+                <User size={16} />
+                Login
+              </Link>
+              <Link to="/signup" className={`${navItemBase} primary-btn`}>
+                Create account
+              </Link>
+            </>
           ) : (
             <>
-              <Link 
-                                to="/upload"
-                                className="px-4 py-2 rounded-lg hover:bg-white hover:text-blue-600 transition-all duration-200 flex items-center gap-2 text-white"              >
-                <Upload size={18} />
-                Upload
-              </Link>
-              <Link 
-                        to="/track"
-                                className="px-4 py-2 rounded-lg hover:bg-white hover:text-blue-600 transition-all duration-200 flex items-center gap-2 text-white"              >
-                <Search size={18} />
-                Track
-              </Link>
-              {user.role === "user" && (
-                <Link 
-                  to="/dashboard" 
-                  className="px-4 py-2 rounded-lg hover:bg-white hover:text-blue-600 transition-all duration-200 flex items-center gap-2 text-white"
-                >
-                  <LayoutDashboard size={18} />
-                  Dashboard
-                </Link>
-              )}
-              {user.role === "admin" && (
-                <Link 
-                  to="/admin" 
-                  className="px-4 py-2 rounded-lg hover:bg-white hover:text-blue-600 transition-all duration-200 flex items-center gap-2 text-white"
-                >
-                  <Shield size={18} />
-                  Admin
-                </Link>
-              )}
-              {user.name && (
-                <div className="px-3 py-1 mx-2 bg-white bg-opacity-20 rounded-full text-sm text-white font-medium">
-                  👤 {user.name}
-                </div>
-              )}
+              <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">
+                <span className="text-slate-400">Signed in as</span>{" "}
+                <span className="font-semibold text-white">{user.name || "User"}</span>
+              </div>
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 bg-red-500 rounded-lg hover:bg-red-600 transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-2"
+                className={`${navItemBase} danger-btn`}
+                type="button"
               >
-                <LogOut size={18} />
+                <LogOut size={16} />
                 Logout
               </button>
             </>
           )}
         </div>
 
-        {/* Mobile Menu Button */}
-        <button 
-          className="md:hidden p-2 rounded-lg hover:bg-white hover:bg-opacity-20 transition-all"
-          onClick={() => setOpen(!open)}
+        <button
+          type="button"
+          onClick={() => setOpen((current) => !current)}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white transition hover:bg-white/10 md:hidden"
+          aria-label="Toggle navigation menu"
         >
-          {open ? <X size={26} /> : <Menu size={26} />}
+          {open ? <X size={20} /> : <Menu size={20} />}
         </button>
       </div>
 
-      {/* Mobile Menu */}
       {open && (
-        <div className="md:hidden bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-700 text-white px-6 py-4 space-y-3 font-medium border-t border-blue-500">
-          {!isLoggedIn ? (
-            <Link 
-              to="/login" 
-              className="block px-4 py-2 rounded-lg hover:bg-white hover:text-blue-600 transition-all"
-              onClick={() => setOpen(false)}
-            >
-              Login
-            </Link>
-          ) : (
-            <>
-              <Link 
-                                to="/upload"
-                                className="block px-4 py-2 rounded-lg hover:bg-white hover:text-blue-600 transition-all flex items-center gap-2"                onClick={() => setOpen(false)}
-              >
-                <Upload size={18} />
-                Upload
-              </Link>
-                            <Link
-                              to="/track"
-                              className="block px-4 py-2 rounded-lg hover:bg-white hover:text-blue-600 transition-all flex items-center gap-2"
-                              onClick={() => setOpen(false)}
-                            >
-                              <Search size={18} />
-                              Track
-                            </Link>              {user.role === "user" && (
-                <Link 
-                  to="/dashboard" 
-                  className="block px-4 py-2 rounded-lg hover:bg-white hover:text-blue-600 transition-all flex items-center gap-2"
-                  onClick={() => setOpen(false)}
+        <div className="border-t border-white/10 bg-slate-950/96 px-4 py-4 md:hidden">
+          <div className="mx-auto max-w-7xl space-y-3">
+            {isLoggedIn && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
+                  Signed in
+                </p>
+                <p className="mt-1 text-base font-semibold text-white">
+                  {user.name || "User"}
+                </p>
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              {!isLoggedIn && (
+                <>
+                  <Link
+                    to="/login"
+                    onClick={() => setOpen(false)}
+                    className="secondary-btn inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold"
+                  >
+                    <User size={16} />
+                    Login
+                  </Link>
+                  <Link
+                    to="/signup"
+                    onClick={() => setOpen(false)}
+                    className="primary-btn inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold"
+                  >
+                    <User size={16} />
+                    Create account
+                  </Link>
+                </>
+              )}
+
+              {allLinks.map((link) => {
+                const Icon = link.icon;
+                return (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    onClick={() => setOpen(false)}
+                    className={getLinkClassName(link.to)}
+                  >
+                    <Icon size={16} />
+                    {link.label}
+                  </Link>
+                );
+              })}
+
+              {isLoggedIn && (
+                <button
+                  onClick={handleLogout}
+                  type="button"
+                  className="danger-btn inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold"
                 >
-                  <LayoutDashboard size={18} />
-                  Dashboard
-                </Link>
+                  <LogOut size={16} />
+                  Logout
+                </button>
               )}
-              {user.role === "admin" && (
-                <Link 
-                  to="/admin" 
-                  className="block px-4 py-2 rounded-lg hover:bg-white hover:text-blue-600 transition-all flex items-center gap-2"
-                  onClick={() => setOpen(false)}
-                >
-                  <Shield size={18} />
-                  Admin
-                </Link>
-              )}
-              {user.name && (
-                <div className="px-4 py-2 text-sm bg-white bg-opacity-20 rounded-lg text-white">
-                  👤 {user.name}
-                </div>
-              )}
-              <button
-                onClick={() => { handleLogout(); setOpen(false); }}
-                className="w-full px-4 py-2 bg-red-500 rounded-lg hover:bg-red-600 transition-all shadow-lg flex items-center justify-center gap-2"
-              >
-                <LogOut size={18} />
-                Logout
-              </button>
-            </>
-          )}
+            </div>
+          </div>
         </div>
       )}
-    </nav>
+    </header>
   );
 }
 

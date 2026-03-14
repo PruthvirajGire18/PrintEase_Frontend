@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
 import Upload from "./pages/Upload";
@@ -13,9 +13,13 @@ import Unauthorized from "./pages/Unauthorized";
 import "./App.css";
 
 function App() {
+  const location = useLocation();
+  const isAuthPage =
+    location.pathname === "/login" || location.pathname === "/signup";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-      <Navbar />
+    <div className="app-shell">
+      {!isAuthPage && <Navbar />}
       <Routes>
         <Route path="/" element={<Home />} />
 

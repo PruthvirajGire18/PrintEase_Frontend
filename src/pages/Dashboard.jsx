@@ -1,185 +1,337 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
-import { Package, FileText, Download, Clock, CheckCircle, AlertCircle, Loader2, Receipt } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Clock3,
+  Download,
+  FileText,
+  Loader2,
+  Package,
+  Receipt,
+  RefreshCw,
+  Search,
+} from "lucide-react";
+
+import API from "../api/api";
+
+const formatCurrency = (amount = 0) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(amount) || 0);
+
+const statusStyles = {
+  pending: "border-amber-400/20 bg-amber-500/10 text-amber-100",
+  processing: "border-blue-400/20 bg-blue-500/10 text-blue-100",
+  ready: "border-violet-400/20 bg-violet-500/10 text-violet-100",
+  delivered: "border-emerald-400/20 bg-emerald-500/10 text-emerald-100",
+};
 
 function Dashboard() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+
+  const fetchUserOrders = async ({ isRefresh = false } = {}) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      setError("");
+
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setOrders([]);
+        setError("Please login to view your orders.");
+        return;
+      }
+
+      const res = await API.get("/orders");
+
+      if (res.data.success) {
+        setOrders(res.data.orders || []);
+      } else {
+        setOrders([]);
+        setError(res.data.message || "Failed to fetch your orders.");
+      }
+    } catch (err) {
+      console.error("Error fetching orders:", err);
+      console.error("Error response:", err.response?.data);
+      setOrders([]);
+      setError(
+        err.response?.data?.error ||
+          err.response?.data?.message ||
+          err.message ||
+          "Failed to fetch your orders. Please check your connection."
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchUserOrders = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        if (!token) {
-          alert("Please login to view your orders");
-          setLoading(false);
-          return;
-        }
-
-        const res = await axios.get("https://print-ease-backend-2121.vercel.app/api/orders", {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-        
-        if (res.data.success) {
-          setOrders(res.data.orders || []);
-        } else {
-          console.error("API returned unsuccessful response:", res.data);
-          alert(res.data.message || "Failed to fetch your orders");
-        }
-      } catch (err) {
-        console.error("Error fetching orders:", err);
-        console.error("Error response:", err.response?.data);
-        const errorMessage = err.response?.data?.error || err.response?.data?.message || err.message || "Failed to fetch your orders. Please check your connection.";
-        alert(errorMessage);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchUserOrders();
   }, []);
 
-  const getStatusIcon = (status) => {
-    switch(status) {
-      case "delivered":
-        return <CheckCircle className="text-green-600" size={20} />;
-      case "ready":
-        return <Package className="text-blue-600" size={20} />;
-      case "processing":
-        return <Loader2 className="text-yellow-600 animate-spin" size={20} />;
-      default:
-        return <AlertCircle className="text-red-500" size={20} />;
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch(status) {
-      case "delivered":
-        return "bg-green-100 text-green-700 border-green-300";
-      case "ready":
-        return "bg-blue-100 text-blue-700 border-blue-300";
-      case "processing":
-        return "bg-yellow-100 text-yellow-700 border-yellow-300";
-      default:
-        return "bg-red-100 text-red-700 border-red-300";
-    }
-  };
+  const totalSpend = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
+  const totalFiles = orders.reduce((sum, order) => sum + (order.files?.length || 0), 0);
+  const activeOrders = orders.filter((order) =>
+    ["pending", "processing", "ready"].includes(order.orderStatus)
+  ).length;
+  const deliveredOrders = orders.filter((order) => order.orderStatus === "delivered").length;
 
   if (loading) {
     return (
-      <div className="flex flex-col justify-center items-center h-screen">
-        <Loader2 className="animate-spin text-blue-600 mb-4" size={48} />
-        <p className="text-xl font-semibold text-gray-700">Loading your orders...</p>
+      <div className="page-container">
+        <div className="glass-card flex min-h-[420px] flex-col items-center justify-center rounded-[32px] p-8 text-center">
+          <Loader2 className="animate-spin text-blue-300" size={40} />
+          <p className="mt-4 text-xl font-semibold text-white">Loading your orders...</p>
+          <p className="mt-2 text-sm text-slate-400">
+            Pulling the latest print requests and statuses into your dashboard.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-12 px-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-6 md:mb-10 animate-fade-in">
-          <div className="inline-flex items-center justify-center w-12 h-12 md:w-16 md:h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl mb-3 md:mb-4 shadow-lg">
-            <Receipt className="text-white" size={24} />
-          </div>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2 md:mb-3 px-2">
-            Your Orders
-          </h2>
-          <p className="text-gray-600 text-base md:text-lg px-2">Track and manage all your print orders</p>
+    <div className="page-container">
+      <div className="page-header items-center text-center">
+        <div className="mx-auto max-w-4xl">
+          <span className="chip">
+            <Receipt size={14} />
+            User Dashboard
+          </span>
+          <h1 className="page-title mt-4">Your orders, totals, and tracking in one place.</h1>
+          <p className="page-subtitle mt-3">
+            The page now keeps supporting content in the main flow, so nothing feels pushed
+            off to the right side on larger screens.
+          </p>
         </div>
 
-        {/* Orders Grid */}
-        {orders.length === 0 ? (
-          <div className="bg-white rounded-2xl md:rounded-3xl shadow-xl p-8 md:p-12 text-center border border-gray-100 animate-scale-in">
-            <div className="inline-flex items-center justify-center w-16 h-16 md:w-20 md:h-20 bg-gray-100 rounded-full mb-4 md:mb-6">
-              <Package className="text-gray-400" size={32} />
+        <button
+          type="button"
+          onClick={() => fetchUserOrders({ isRefresh: true })}
+          disabled={refreshing}
+          className={`secondary-btn inline-flex items-center justify-center gap-2 self-center rounded-2xl px-5 py-3 text-sm font-semibold ${
+            refreshing ? "cursor-not-allowed opacity-70" : ""
+          }`}
+        >
+          {refreshing ? <Loader2 className="animate-spin" size={18} /> : <RefreshCw size={18} />}
+          Refresh orders
+        </button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="glass-card rounded-[28px] p-5 card-hover">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">Total Orders</p>
+          <p className="mt-4 text-3xl font-black tracking-[-0.04em] text-white">{orders.length}</p>
+          <p className="mt-2 text-sm text-slate-400">Everything you have submitted so far.</p>
+        </div>
+        <div className="glass-card rounded-[28px] p-5 card-hover">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-200">Active Orders</p>
+          <p className="mt-4 text-3xl font-black tracking-[-0.04em] text-white">{activeOrders}</p>
+          <p className="mt-2 text-sm text-slate-400">Pending, processing, or ready for pickup.</p>
+        </div>
+        <div className="glass-card rounded-[28px] p-5 card-hover">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200">Total Spend</p>
+          <p className="mt-4 text-3xl font-black tracking-[-0.04em] text-white">{formatCurrency(totalSpend)}</p>
+          <p className="mt-2 text-sm text-slate-400">A quick view of your printing cost over time.</p>
+        </div>
+        <div className="glass-card rounded-[28px] p-5 card-hover">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-200">Delivered</p>
+          <p className="mt-4 text-3xl font-black tracking-[-0.04em] text-white">{deliveredOrders}</p>
+          <p className="mt-2 text-sm text-slate-400">Completed orders that are already closed out.</p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-6 rounded-[28px] border border-rose-500/20 bg-rose-500/10 px-5 py-4 text-sm text-rose-100">
+          {error}
+        </div>
+      )}
+
+      {orders.length === 0 ? (
+        <div className="glass-card mt-6 rounded-[32px] p-8 md:p-10">
+          <div className="empty-state rounded-[28px] p-8 md:p-10">
+            <div className="flex flex-col items-start gap-4 md:flex-row md:items-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-[24px] bg-slate-900/70 text-blue-200">
+                <Package size={28} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black tracking-[-0.04em] text-white">No orders yet</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+                  Your dashboard is ready. Once you upload a document and place an order,
+                  the entire history will appear here with cleaner progress visibility.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => navigate("/upload")}
+                  className="primary-btn mt-5 inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold"
+                >
+                  Start a new upload
+                  <ArrowRight size={18} />
+                </button>
+              </div>
             </div>
-            <h3 className="text-xl md:text-2xl font-bold text-gray-800 mb-2">No Orders Yet</h3>
-            <p className="text-gray-600 mb-6 text-sm md:text-base">Start by uploading your first document!</p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-            {orders.map((order, idx) => (
-              <div 
-                key={order._id} 
-                className="bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100 overflow-hidden card-hover animate-fade-in"
-                style={{ animationDelay: `${idx * 0.1}s` }}
-              >
-                {/* Order Header */}
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-3 md:p-4 text-white">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <Package size={18} />
-                      <span className="font-bold text-xs md:text-sm truncate">{order.orderNumber}</span>
-                    </div>
-                    <div className={`flex items-center gap-1 px-2 md:px-3 py-1 rounded-full ${getStatusColor(order.orderStatus)} bg-white`}>
-                      {getStatusIcon(order.orderStatus)}
-                      <span className="text-[10px] md:text-xs font-semibold capitalize">{order.orderStatus}</span>
-                    </div>
-                  </div>
+        </div>
+      ) : (
+        <section className="mt-6 space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="glass-card rounded-[32px] p-6">
+              <span className="chip">
+                <FileText size={14} />
+                Overview
+              </span>
+              <h2 className="mt-4 text-2xl font-black tracking-[-0.04em] text-white">
+                A clearer snapshot of your order activity.
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-slate-400">
+                Supporting content now stays in the main dashboard flow, so the page feels
+                balanced instead of sending details into a separate right column.
+              </p>
+            </div>
+
+            <div className="glass-card rounded-[32px] p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Quick Totals
+              </p>
+              <div className="mt-5 grid gap-4 md:grid-cols-3">
+                <div className="soft-card rounded-[24px] p-4">
+                  <p className="text-sm text-slate-400">Uploaded Files</p>
+                  <p className="mt-2 text-3xl font-black tracking-[-0.04em] text-white">{totalFiles}</p>
                 </div>
-
-                {/* Order Content */}
-                <div className="p-4 md:p-6">
-                  {/* Amount */}
-                  <div className="flex items-center justify-between mb-3 md:mb-4 pb-3 md:pb-4 border-b">
-                    <span className="text-gray-600 font-medium text-sm md:text-base">Total Amount</span>
-                    <span className="text-xl md:text-2xl font-bold text-blue-600">₹{order.totalAmount}</span>
-                  </div>
-
-                  {/* Files */}
-                  <div className="space-y-2 md:space-y-3 mb-3 md:mb-4">
-                    <h4 className="text-xs md:text-sm font-semibold text-gray-700 flex items-center gap-2">
-                      <FileText size={14} />
-                      Files ({order.files?.length || 0})
-                    </h4>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {order.files && order.files.map((file, idx) => (
-                        <div key={idx} className="bg-gray-50 rounded-lg p-2 md:p-3 border border-gray-200">
-                          <a 
-                            href={file.cloudinaryUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="text-blue-600 hover:text-blue-800 font-medium text-xs md:text-sm flex items-center gap-1 md:gap-2 mb-1 md:mb-2 group"
-                          >
-                            <Download size={12} className="group-hover:translate-y-1 transition-transform" />
-                            <span className="truncate">{file.filename}</span>
-                          </a>
-                          <div className="flex flex-wrap gap-1 md:gap-1.5">
-                            <span className="bg-blue-100 text-blue-700 px-1.5 md:px-2 py-0.5 rounded-md text-[10px] md:text-xs font-medium">
-                              {file.pages} pages
-                            </span>
-                            <span className="bg-green-100 text-green-700 px-1.5 md:px-2 py-0.5 rounded-md text-[10px] md:text-xs font-medium">
-                              {file.copies} copies
-                            </span>
-                            <span className={`px-1.5 md:px-2 py-0.5 rounded-md text-[10px] md:text-xs font-medium ${
-                              file.color === 'color' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              {file.color === 'color' ? 'Color ₹5' : 'B&W ₹2'}
-                            </span>
-                            {file.doubleSided && (
-                              <span className="bg-orange-100 text-orange-700 px-1.5 md:px-2 py-0.5 rounded-md text-[10px] md:text-xs font-medium">
-                                2-Sided
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Total Pages */}
-                  <div className="flex items-center justify-between pt-3 md:pt-4 border-t">
-                    <span className="text-gray-600 text-xs md:text-sm">Total Pages</span>
-                    <span className="font-bold text-gray-800 text-sm md:text-base">{order.totalPages}</span>
-                  </div>
+                <div className="soft-card rounded-[24px] p-4">
+                  <p className="text-sm text-slate-400">Current Spend</p>
+                  <p className="mt-2 text-3xl font-black tracking-[-0.04em] text-white">
+                    {formatCurrency(totalSpend)}
+                  </p>
+                </div>
+                <div className="soft-card rounded-[24px] p-4">
+                  <p className="text-sm text-slate-400">Best Next Action</p>
+                  <p className="mt-2 text-base font-semibold text-white">
+                    Track active orders or place a new print request.
+                  </p>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            {orders.map((order) => (
+              <article key={order._id} className="glass-card rounded-[32px] p-5 md:p-6 card-hover">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="chip">
+                        <Package size={14} />
+                        {order.orderNumber}
+                      </span>
+                      <span
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold capitalize ${
+                          statusStyles[order.orderStatus] ||
+                          "border-slate-700 bg-slate-900/60 text-slate-200"
+                        }`}
+                      >
+                        {order.orderStatus === "delivered" ? (
+                          <CheckCircle2 size={14} />
+                        ) : (
+                          <Clock3 size={14} />
+                        )}
+                        {order.orderStatus}
+                      </span>
+                    </div>
+                    <h2 className="mt-4 text-2xl font-black tracking-[-0.04em] text-white">
+                      {formatCurrency(order.totalAmount)}
+                    </h2>
+                    <p className="mt-2 text-sm text-slate-400">
+                      {order.files?.length || 0} files, {order.totalPages || 0} total pages.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/track?order=${encodeURIComponent(order.orderNumber)}`)}
+                    className="secondary-btn inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold"
+                  >
+                    <Search size={16} />
+                    Track order
+                  </button>
+                </div>
+
+                <div className="mt-6 grid gap-4 md:grid-cols-3">
+                  <div className="soft-card rounded-[24px] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Files</p>
+                    <p className="mt-3 text-2xl font-black text-white">{order.files?.length || 0}</p>
+                  </div>
+                  <div className="soft-card rounded-[24px] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Pages</p>
+                    <p className="mt-3 text-2xl font-black text-white">{order.totalPages || 0}</p>
+                  </div>
+                  <div className="soft-card rounded-[24px] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Status</p>
+                    <p className="mt-3 text-2xl font-black capitalize text-white">{order.orderStatus}</p>
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  {order.files?.map((file, index) => (
+                    <div key={`${file.filename}-${index}`} className="soft-card rounded-[24px] p-4">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            File {index + 1}
+                          </p>
+                          <h3 className="mt-2 break-words text-base font-semibold text-white">
+                            {file.filename}
+                          </h3>
+                        </div>
+
+                        <a
+                          href={file.cloudinaryUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="secondary-btn inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                        >
+                          <Download size={16} />
+                          Open file
+                        </a>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-100">
+                          {file.pages} pages
+                        </span>
+                        <span className="rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-100">
+                          {file.copies} copies
+                        </span>
+                        <span className="rounded-full bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-100">
+                          {file.color === "color" ? "Color | Rs.5/page" : "B&W | Rs.2/page"}
+                        </span>
+                        {file.doubleSided && (
+                          <span className="rounded-full bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-100">
+                            Double-sided
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </article>
             ))}
           </div>
-        )}
-      </div>
+        </section>
+      )}
     </div>
   );
 }

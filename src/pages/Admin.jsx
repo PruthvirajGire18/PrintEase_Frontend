@@ -1,43 +1,67 @@
 import React, { useEffect, useState } from "react";
-import axios from "axios";
-import { 
-  Shield, 
-  Package, 
-  Users, 
-  IndianRupee, 
-  FileText, 
-  Download, 
-  CheckCircle, 
-  Clock, 
-  AlertCircle, 
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clock3,
+  Download,
+  FileText,
+  IndianRupee,
   Loader2,
+  Package,
+  RefreshCw,
+  Shield,
   Trash2,
-  RefreshCw
+  Users,
 } from "lucide-react";
+
+import API from "../api/api";
+
+const formatCurrency = (amount = 0) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(amount) || 0);
+
+const statusStyles = {
+  pending: "border-amber-400/20 bg-amber-500/10 text-amber-100",
+  processing: "border-blue-400/20 bg-blue-500/10 text-blue-100",
+  ready: "border-violet-400/20 bg-violet-500/10 text-violet-100",
+  delivered: "border-emerald-400/20 bg-emerald-500/10 text-emerald-100",
+};
 
 function Admin() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [updatingId, setUpdatingId] = useState(null);
+  const [error, setError] = useState("");
 
-  const fetchOrders = async () => {
+  const fetchOrders = async ({ isRefresh = false } = {}) => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get("https://print-ease-backend-2121.vercel.app/api/admin/orders", {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : ""
-        }
-      });
-      if (res.data.success) {
-        setOrders(res.data.orders);
+      if (isRefresh) {
+        setRefreshing(true);
       } else {
-        alert("Failed to fetch orders from server");
+        setLoading(true);
+      }
+
+      setError("");
+      const res = await API.get("/admin/orders");
+
+      if (res.data.success) {
+        setOrders(res.data.orders || []);
+      } else {
+        setOrders([]);
+        setError("Failed to fetch orders from server.");
       }
     } catch (err) {
       console.error(err);
-      alert("Failed to fetch orders from server");
+      setOrders([]);
+      setError("Failed to fetch orders from server.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -48,359 +72,382 @@ function Admin() {
   const updateStatus = async (id, status) => {
     try {
       setUpdatingId(id);
-      const token = localStorage.getItem("token");
-      await axios.put(`https://print-ease-backend-2121.vercel.app/api/admin/orders/${id}/status`, 
-        { status },
-        {
-          headers: {
-            Authorization: token ? `Bearer ${token}` : ""
-          }
-        }
-      );
-      fetchOrders();
+      setError("");
+      await API.put(`/admin/orders/${id}/status`, { status });
+      await fetchOrders({ isRefresh: true });
     } catch (err) {
       console.error(err);
-      alert("Failed to update status");
+      setError("Failed to update status.");
     } finally {
       setUpdatingId(null);
     }
   };
 
   const deleteOrder = async (id, orderNumber) => {
-    if (!window.confirm(`Are you sure you want to delete order ${orderNumber}? This action cannot be undone.`)) return;
+    if (!window.confirm(`Are you sure you want to delete order ${orderNumber}? This action cannot be undone.`)) {
+      return;
+    }
+
     try {
       setUpdatingId(id);
-      const token = localStorage.getItem("token");
-      await axios.delete(`https://print-ease-backend-2121.vercel.app/api/admin/orders/${id}`, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : ""
-        }
-      });
-      fetchOrders();
+      setError("");
+      await API.delete(`/admin/orders/${id}`);
+      await fetchOrders({ isRefresh: true });
     } catch (err) {
       console.error(err);
-      alert("Failed to delete order");
+      setError("Failed to delete order.");
     } finally {
       setUpdatingId(null);
     }
   };
 
-  // Calculate statistics
   const stats = {
     total: orders.length,
-    pending: orders.filter(o => o.orderStatus === 'pending').length,
-    processing: orders.filter(o => o.orderStatus === 'processing').length,
-    ready: orders.filter(o => o.orderStatus === 'ready').length,
-    delivered: orders.filter(o => o.orderStatus === 'delivered').length,
-    totalRevenue: orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0),
-    totalUsers: new Set(orders.map(o => o.userId?._id).filter(Boolean)).size
-  };
-
-  const getStatusIcon = (status) => {
-    switch(status) {
-      case "delivered":
-        return <CheckCircle className="text-green-600" size={18} />;
-      case "ready":
-        return <Package className="text-blue-600" size={18} />;
-      case "processing":
-        return <Loader2 className="text-yellow-600 animate-spin" size={18} />;
-      case "pending":
-        return <Clock className="text-orange-600" size={18} />;
-      default:
-        return <AlertCircle className="text-red-500" size={18} />;
-    }
-  };
-
-  const getStatusBadge = (status) => {
-    const styles = {
-      delivered: "bg-green-100 text-green-700 border-green-300",
-      ready: "bg-blue-100 text-blue-700 border-blue-300",
-      processing: "bg-yellow-100 text-yellow-700 border-yellow-300",
-      pending: "bg-orange-100 text-orange-700 border-orange-300"
-    };
-    return styles[status] || "bg-gray-100 text-gray-700 border-gray-300";
+    pending: orders.filter((order) => order.orderStatus === "pending").length,
+    processing: orders.filter((order) => order.orderStatus === "processing").length,
+    ready: orders.filter((order) => order.orderStatus === "ready").length,
+    delivered: orders.filter((order) => order.orderStatus === "delivered").length,
+    totalRevenue: orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0),
+    totalUsers: new Set(orders.map((order) => order.userId?._id).filter(Boolean)).size,
   };
 
   if (loading) {
     return (
-      <div className="flex flex-col justify-center items-center h-screen">
-        <Loader2 className="animate-spin text-indigo-600 mb-4" size={48} />
-        <p className="text-xl font-semibold text-gray-700">Loading orders...</p>
+      <div className="page-container">
+        <div className="glass-card flex min-h-[420px] flex-col items-center justify-center rounded-[32px] p-8 text-center">
+          <Loader2 className="animate-spin text-blue-300" size={40} />
+          <p className="mt-4 text-xl font-semibold text-white">Loading admin data...</p>
+          <p className="mt-2 text-sm text-slate-400">
+            Gathering every print request so you can manage them from one dashboard.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-6 md:py-8 px-4">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-6 md:mb-8 animate-fade-in">
-          <div className="inline-flex items-center justify-center w-12 h-12 md:w-16 md:h-16 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl mb-3 md:mb-4 shadow-lg">
-            <Shield className="text-white" size={24} />
-          </div>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2 md:mb-3 px-2">
-            Admin Dashboard
-          </h2>
-          <p className="text-gray-600 text-base md:text-lg px-2">Manage all print orders and track statistics</p>
+    <div className="page-container">
+      <div className="page-header lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <span className="chip">
+            <Shield size={14} />
+            Admin Control
+          </span>
+          <h1 className="page-title mt-4">Manage the print queue with clearer priorities.</h1>
+          <p className="page-subtitle mt-3">
+            The admin workspace now uses a denser but cleaner dark dashboard layout, with
+            easier status scanning, better actions, and more readable file summaries.
+          </p>
         </div>
 
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4 mb-6 md:mb-8">
-          <div className="bg-white rounded-xl p-3 md:p-4 shadow-lg border border-gray-100 card-hover">
-            <div className="flex items-center gap-2 md:gap-3">
-              <div className="bg-blue-100 p-1.5 md:p-2 rounded-lg">
-                <Package className="text-blue-600" size={16} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-gray-600 truncate">Total Orders</p>
-                <p className="text-lg md:text-xl font-bold text-gray-800">{stats.total}</p>
-              </div>
-            </div>
-          </div>
+        <button
+          type="button"
+          onClick={() => fetchOrders({ isRefresh: true })}
+          disabled={refreshing}
+          className={`secondary-btn inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold ${
+            refreshing ? "cursor-not-allowed opacity-70" : ""
+          }`}
+        >
+          {refreshing ? <Loader2 className="animate-spin" size={18} /> : <RefreshCw size={18} />}
+          Refresh queue
+        </button>
+      </div>
 
-          <div className="bg-white rounded-xl p-3 md:p-4 shadow-lg border border-gray-100 card-hover">
-            <div className="flex items-center gap-2 md:gap-3">
-              <div className="bg-orange-100 p-1.5 md:p-2 rounded-lg">
-                <Clock className="text-orange-600" size={16} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-gray-600 truncate">Pending</p>
-                <p className="text-lg md:text-xl font-bold text-orange-600">{stats.pending}</p>
-              </div>
-            </div>
-          </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        <div className="glass-card rounded-[28px] p-5 card-hover">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-200">Orders</p>
+          <p className="mt-4 text-3xl font-black text-white">{stats.total}</p>
+        </div>
+        <div className="glass-card rounded-[28px] p-5 card-hover">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Pending</p>
+          <p className="mt-4 text-3xl font-black text-white">{stats.pending}</p>
+        </div>
+        <div className="glass-card rounded-[28px] p-5 card-hover">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-200">Processing</p>
+          <p className="mt-4 text-3xl font-black text-white">{stats.processing}</p>
+        </div>
+        <div className="glass-card rounded-[28px] p-5 card-hover">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-200">Ready</p>
+          <p className="mt-4 text-3xl font-black text-white">{stats.ready}</p>
+        </div>
+        <div className="glass-card rounded-[28px] p-5 card-hover">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Delivered</p>
+          <p className="mt-4 text-3xl font-black text-white">{stats.delivered}</p>
+        </div>
+        <div className="glass-card rounded-[28px] p-5 card-hover">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-fuchsia-200">Revenue</p>
+          <p className="mt-4 text-3xl font-black text-white">{formatCurrency(stats.totalRevenue)}</p>
+        </div>
+      </div>
 
-          <div className="bg-white rounded-xl p-3 md:p-4 shadow-lg border border-gray-100 card-hover">
-            <div className="flex items-center gap-2 md:gap-3">
-              <div className="bg-yellow-100 p-1.5 md:p-2 rounded-lg">
-                <Loader2 className="text-yellow-600" size={16} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-gray-600 truncate">Processing</p>
-                <p className="text-lg md:text-xl font-bold text-yellow-600">{stats.processing}</p>
-              </div>
+      <div className="mt-4 grid gap-4 xl:grid-cols-3">
+        <div className="glass-card rounded-[28px] p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/12 text-blue-200">
+              <Users size={20} />
             </div>
-          </div>
-
-          <div className="bg-white rounded-xl p-3 md:p-4 shadow-lg border border-gray-100 card-hover">
-            <div className="flex items-center gap-2 md:gap-3">
-              <div className="bg-blue-100 p-1.5 md:p-2 rounded-lg">
-                <Package className="text-blue-600" size={16} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-gray-600 truncate">Ready</p>
-                <p className="text-lg md:text-xl font-bold text-blue-600">{stats.ready}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl p-3 md:p-4 shadow-lg border border-gray-100 card-hover">
-            <div className="flex items-center gap-2 md:gap-3">
-              <div className="bg-green-100 p-1.5 md:p-2 rounded-lg">
-                <CheckCircle className="text-green-600" size={16} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-gray-600 truncate">Delivered</p>
-                <p className="text-lg md:text-xl font-bold text-green-600">{stats.delivered}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl p-3 md:p-4 shadow-lg border border-gray-100 card-hover">
-            <div className="flex items-center gap-2 md:gap-3">
-              <div className="bg-purple-100 p-1.5 md:p-2 rounded-lg">
-                <IndianRupee className="text-purple-600" size={16} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[10px] md:text-xs text-gray-600 truncate">Revenue</p>
-                <p className="text-base md:text-xl font-bold text-purple-600">₹{stats.totalRevenue}</p>
-              </div>
+            <div>
+              <p className="text-sm text-slate-400">Unique Customers</p>
+              <p className="mt-1 text-2xl font-black text-white">{stats.totalUsers}</p>
             </div>
           </div>
         </div>
-
-        {/* Orders Table */}
-        <div className="bg-white rounded-xl md:rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-scale-in">
-          <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-3 md:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2 md:gap-3 text-white">
-              <FileText size={20} />
-              <h3 className="text-lg md:text-xl font-bold">All Orders ({orders.length})</h3>
+        <div className="glass-card rounded-[28px] p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/12 text-violet-200">
+              <Package size={20} />
             </div>
-            <button
-              onClick={fetchOrders}
-              className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-lg transition-all flex items-center gap-2 text-sm md:text-base"
-            >
-              <RefreshCw size={16} />
-              Refresh
-            </button>
+            <div>
+              <p className="text-sm text-slate-400">Queue Health</p>
+              <p className="mt-1 text-base font-semibold text-white">
+                {stats.pending + stats.processing > 0
+                  ? "Active production queue in progress."
+                  : "No active queue backlog right now."}
+              </p>
+            </div>
           </div>
-
-          {orders.length === 0 ? (
-            <div className="p-12 text-center">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-gray-100 rounded-full mb-6">
-                <Package className="text-gray-400" size={40} />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-800 mb-2">No Orders Yet</h3>
-              <p className="text-gray-600">Orders will appear here once customers place them.</p>
+        </div>
+        <div className="glass-card rounded-[28px] p-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-200">
+              <IndianRupee size={20} />
             </div>
-          ) : (
-            <div className="overflow-x-auto -mx-4 md:mx-0">
-              {/* Mobile Card View */}
-              <div className="md:hidden space-y-4 p-4">
-                {orders.map((o) => (
-                  <div 
-                    key={o._id} 
-                    className={`bg-white rounded-xl p-4 shadow-lg border border-gray-200 ${
-                      updatingId === o._id ? 'opacity-50' : ''
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Package className="text-indigo-600" size={18} />
-                        <span className="text-sm font-bold text-gray-900">{o.orderNumber}</span>
-                      </div>
-                      <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full border ${getStatusBadge(o.orderStatus)}`}>
-                        {getStatusIcon(o.orderStatus)}
-                        <span className="text-[10px] font-semibold capitalize">{o.orderStatus}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2 mb-3">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Users className="text-gray-400" size={14} />
-                        <span className="text-gray-700">
-                          {o.userId && o.userId.name ? o.userId.name : "Guest"}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <IndianRupee className="text-green-600" size={14} />
-                        <span className="font-bold text-green-600">₹{o.totalAmount}</span>
-                      </div>
-                    </div>
+            <div>
+              <p className="text-sm text-slate-400">Management Note</p>
+              <p className="mt-1 text-base font-semibold text-white">
+                Status changes and deletions stay exactly as before, now with cleaner UX.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
 
-                    <div className="space-y-2 mb-3">
-                      {o.files && o.files.map((file, idx) => (
-                        <div key={idx} className="bg-gray-50 rounded-lg p-2 border border-gray-200">
-                          <a 
-                            href={file.cloudinaryUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="text-indigo-600 hover:text-indigo-800 font-medium text-xs flex items-center gap-1 mb-1"
-                          >
-                            <Download size={12} />
-                            <span className="truncate">{file.filename}</span>
-                          </a>
-                          <div className="flex flex-wrap gap-1">
-                            <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
-                              {file.pages}p
-                            </span>
-                            <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-[10px] font-medium">
-                              {file.copies}c
-                            </span>
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                              file.color === 'color' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              {file.color === 'color' ? 'Color' : 'B&W'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+      {error && (
+        <div className="mt-6 rounded-[28px] border border-rose-500/20 bg-rose-500/10 px-5 py-4 text-sm text-rose-100">
+          {error}
+        </div>
+      )}
 
-                    <div className="flex flex-col gap-2 pt-3 border-t">
-                      <select
-                        value={o.orderStatus}
-                        onChange={(e) => updateStatus(o._id, e.target.value)}
-                        disabled={updatingId === o._id}
-                        className="w-full border-2 border-gray-200 px-3 py-2 rounded-lg text-sm font-medium focus:outline-none focus:border-indigo-500"
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="processing">Processing</option>
-                        <option value="ready">Ready</option>
-                        <option value="delivered">Delivered</option>
-                      </select>
-                      <button
-                        onClick={() => deleteOrder(o._id, o.orderNumber)}
-                        disabled={updatingId === o._id}
-                        className="w-full bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                      >
-                        {updatingId === o._id ? (
-                          <Loader2 className="animate-spin" size={16} />
-                        ) : (
-                          <>
-                            <Trash2 size={16} />
-                            Delete
-                          </>
-                        )}
-                      </button>
+      <section className="glass-card mt-6 overflow-hidden rounded-[32px]">
+        <div className="flex flex-col gap-3 border-b border-slate-800 px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Operations</p>
+            <h2 className="mt-2 text-2xl font-black tracking-[-0.04em] text-white">
+              All orders ({orders.length})
+            </h2>
+          </div>
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/45 px-4 py-3 text-sm text-slate-400">
+            Status, user, files, amount, and actions stay available on every screen size.
+          </div>
+        </div>
+
+        {orders.length === 0 ? (
+          <div className="p-8 md:p-10">
+            <div className="empty-state rounded-[28px] p-8 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[24px] bg-slate-900/70 text-blue-200">
+                <Package size={28} />
+              </div>
+              <h3 className="mt-5 text-2xl font-black tracking-[-0.04em] text-white">No orders yet</h3>
+              <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+                Orders will appear here once customers place them. The layout is ready for
+                both compact mobile review and detailed desktop management.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-4 p-4 md:hidden">
+              {orders.map((order) => (
+                <article
+                  key={order._id}
+                  className={`soft-card rounded-[28px] p-4 ${
+                    updatingId === order._id ? "opacity-60" : ""
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        Order Number
+                      </p>
+                      <h3 className="mt-2 text-lg font-black text-white">{order.orderNumber}</h3>
+                    </div>
+                    <span
+                      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold capitalize ${
+                        statusStyles[order.orderStatus] ||
+                        "border-slate-700 bg-slate-900/60 text-slate-200"
+                      }`}
+                    >
+                      {order.orderStatus === "delivered" ? (
+                        <CheckCircle2 size={14} />
+                      ) : (
+                        <Clock3 size={14} />
+                      )}
+                      {order.orderStatus}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">User</p>
+                      <p className="mt-2 text-sm font-semibold text-white">
+                        {order.userId?.name || "Guest"}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Amount</p>
+                      <p className="mt-2 text-sm font-semibold text-white">
+                        {formatCurrency(order.totalAmount)}
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
 
-              {/* Desktop Table View */}
-              <table className="hidden md:table min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+                  <div className="mt-4 space-y-3">
+                    {order.files?.map((file, index) => (
+                      <div
+                        key={`${file.filename}-${index}`}
+                        className="rounded-2xl border border-slate-800 bg-slate-950/40 p-3"
+                      >
+                        <a
+                          href={file.cloudinaryUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-2 text-sm font-semibold text-blue-200 hover:text-blue-100"
+                        >
+                          <Download size={14} />
+                          {file.filename}
+                        </a>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span className="rounded-full bg-blue-500/10 px-2.5 py-1 text-[11px] font-semibold text-blue-100">
+                            {file.pages} pages
+                          </span>
+                          <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-100">
+                            {file.copies} copies
+                          </span>
+                          <span className="rounded-full bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-100">
+                            {file.color === "color" ? "Color" : "B&W"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    <select
+                      value={order.orderStatus}
+                      onChange={(event) => updateStatus(order._id, event.target.value)}
+                      disabled={updatingId === order._id}
+                      className="input-shell w-full rounded-2xl px-4 py-3 text-sm font-semibold"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="processing">Processing</option>
+                      <option value="ready">Ready</option>
+                      <option value="delivered">Delivered</option>
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteOrder(order._id, order.orderNumber)}
+                      disabled={updatingId === order._id}
+                      className={`danger-btn inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${
+                        updatingId === order._id ? "cursor-not-allowed opacity-70" : ""
+                      }`}
+                    >
+                      {updatingId === order._id ? (
+                        <Loader2 className="animate-spin" size={16} />
+                      ) : (
+                        <Trash2 size={16} />
+                      )}
+                      Delete order
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
+              <table className="min-w-full divide-y divide-slate-800">
+                <thead className="bg-slate-950/40">
                   <tr>
-                    <th className="px-4 lg:px-6 py-3 lg:py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Order Number</th>
-                    <th className="px-4 lg:px-6 py-3 lg:py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">User</th>
-                    <th className="px-4 lg:px-6 py-3 lg:py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Files</th>
-                    <th className="px-4 lg:px-6 py-3 lg:py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Amount</th>
-                    <th className="px-4 lg:px-6 py-3 lg:py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                    <th className="px-4 lg:px-6 py-3 lg:py-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Order
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      User
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Files
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Amount
+                    </th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Status
+                    </th>
+                    <th className="px-6 py-4 text-center text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {orders.map((o, idx) => (
-                    <tr 
-                      key={o._id} 
-                      className={`hover:bg-indigo-50 transition-all ${
-                        updatingId === o._id ? 'opacity-50' : ''
+                <tbody className="divide-y divide-slate-800">
+                  {orders.map((order) => (
+                    <tr
+                      key={order._id}
+                      className={`transition hover:bg-slate-900/25 ${
+                        updatingId === order._id ? "opacity-60" : ""
                       }`}
-                      style={{ animationDelay: `${idx * 0.05}s` }}
                     >
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <Package className="text-indigo-600" size={16} />
-                          <span className="text-sm font-bold text-gray-900">{o.orderNumber}</span>
+                      <td className="px-6 py-5 align-top">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/12 text-blue-200">
+                            <Package size={18} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-white">{order.orderNumber}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {order.totalPages || 0} pages total
+                            </p>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+
+                      <td className="px-6 py-5 align-top">
                         <div className="flex items-center gap-2">
-                          <Users className="text-gray-400" size={16} />
-                          <span className="text-sm text-gray-700 font-medium">
-                            {o.userId && o.userId.name ? o.userId.name : "Guest"}
+                          <Users className="text-slate-500" size={16} />
+                          <span className="text-sm font-medium text-slate-200">
+                            {order.userId?.name || "Guest"}
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 lg:px-6 py-4">
-                        <div className="space-y-2 max-w-md">
-                          {o.files && o.files.map((file, idx) => (
-                            <div key={idx} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                              <a 
-                                href={file.cloudinaryUrl} 
-                                target="_blank" 
-                                rel="noopener noreferrer" 
-                                className="text-indigo-600 hover:text-indigo-800 font-medium text-sm flex items-center gap-2 mb-2 group"
+
+                      <td className="px-6 py-5 align-top">
+                        <div className="max-w-md space-y-3">
+                          {order.files?.map((file, index) => (
+                            <div
+                              key={`${file.filename}-${index}`}
+                              className="rounded-2xl border border-slate-800 bg-slate-950/35 p-3"
+                            >
+                              <a
+                                href={file.cloudinaryUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 text-sm font-semibold text-blue-200 hover:text-blue-100"
                               >
-                                <Download size={14} className="group-hover:translate-y-1 transition-transform" />
-                                <span className="truncate">{file.filename}</span>
+                                <Download size={14} />
+                                {file.filename}
                               </a>
-                              <div className="flex flex-wrap gap-1.5">
-                                <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md text-xs font-medium">
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <span className="rounded-full bg-blue-500/10 px-2.5 py-1 text-[11px] font-semibold text-blue-100">
                                   {file.pages} pages
                                 </span>
-                                <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-md text-xs font-medium">
+                                <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-100">
                                   {file.copies} copies
                                 </span>
-                                <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${
-                                  file.color === 'color' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'
-                                }`}>
-                                  {file.color === 'color' ? 'Color ₹5' : 'B&W ₹2'}
+                                <span className="rounded-full bg-violet-500/10 px-2.5 py-1 text-[11px] font-semibold text-violet-100">
+                                  {file.color === "color" ? "Color · Rs.5/page" : "B&W · Rs.2/page"}
                                 </span>
                                 {file.doubleSided && (
-                                  <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-md text-xs font-medium">
-                                    2-Sided
+                                  <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-100">
+                                    Double-sided
                                   </span>
                                 )}
                               </div>
@@ -408,42 +455,62 @@ function Admin() {
                           ))}
                         </div>
                       </td>
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+
+                      <td className="px-6 py-5 align-top">
                         <div className="flex items-center gap-2">
-                          <IndianRupee className="text-green-600" size={18} />
-                          <span className="text-lg font-bold text-green-600">₹{o.totalAmount}</span>
+                          <FileText className="text-slate-500" size={16} />
+                          <span className="text-sm font-semibold text-white">
+                            {formatCurrency(order.totalAmount)}
+                          </span>
                         </div>
                       </td>
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border ${getStatusBadge(o.orderStatus)}`}>
-                          {getStatusIcon(o.orderStatus)}
-                          <span className="text-xs font-semibold capitalize">{o.orderStatus}</span>
-                        </div>
+
+                      <td className="px-6 py-5 align-top">
+                        <span
+                          className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold capitalize ${
+                            statusStyles[order.orderStatus] ||
+                            "border-slate-700 bg-slate-900/60 text-slate-200"
+                          }`}
+                        >
+                          {order.orderStatus === "delivered" ? (
+                            <CheckCircle2 size={14} />
+                          ) : order.orderStatus === "pending" ? (
+                            <AlertCircle size={14} />
+                          ) : (
+                            <Clock3 size={14} />
+                          )}
+                          {order.orderStatus}
+                        </span>
                       </td>
-                      <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-2">
+
+                      <td className="px-6 py-5 align-top">
+                        <div className="flex flex-col items-center gap-3">
                           <select
-                            value={o.orderStatus}
-                            onChange={(e) => updateStatus(o._id, e.target.value)}
-                            disabled={updatingId === o._id}
-                            className="border-2 border-gray-200 px-3 py-1.5 rounded-lg text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all cursor-pointer hover:border-indigo-300"
+                            value={order.orderStatus}
+                            onChange={(event) => updateStatus(order._id, event.target.value)}
+                            disabled={updatingId === order._id}
+                            className="input-shell min-w-[150px] rounded-2xl px-4 py-2.5 text-sm font-semibold"
                           >
                             <option value="pending">Pending</option>
                             <option value="processing">Processing</option>
                             <option value="ready">Ready</option>
                             <option value="delivered">Delivered</option>
                           </select>
+
                           <button
-                            onClick={() => deleteOrder(o._id, o.orderNumber)}
-                            disabled={updatingId === o._id}
-                            className="bg-red-500 text-white px-3 py-1.5 rounded-lg hover:bg-red-600 transition-all shadow-md hover:shadow-lg flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Delete Order"
+                            type="button"
+                            onClick={() => deleteOrder(order._id, order.orderNumber)}
+                            disabled={updatingId === order._id}
+                            className={`danger-btn inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold ${
+                              updatingId === order._id ? "cursor-not-allowed opacity-70" : ""
+                            }`}
                           >
-                            {updatingId === o._id ? (
+                            {updatingId === order._id ? (
                               <Loader2 className="animate-spin" size={16} />
                             ) : (
                               <Trash2 size={16} />
                             )}
+                            Delete
                           </button>
                         </div>
                       </td>
@@ -452,9 +519,9 @@ function Admin() {
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-      </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }

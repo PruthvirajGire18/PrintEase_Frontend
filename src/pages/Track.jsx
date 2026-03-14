@@ -1,18 +1,74 @@
-import React, { useState } from "react";
-import axios from "axios";
-import { Search, Package, X, Loader2, CheckCircle, AlertCircle, FileText, Download, Receipt, User } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import {
+  CheckCircle2,
+  Clock3,
+  Download,
+  FileText,
+  Loader2,
+  Package,
+  Receipt,
+  Search,
+  ShieldCheck,
+  User,
+  X,
+} from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+
+import API from "../api/api";
+
+const statusOrder = ["pending", "processing", "ready", "delivered"];
+
+const statusSteps = [
+  {
+    key: "pending",
+    title: "Order received",
+    description: "Your print request has been created and added to the queue.",
+  },
+  {
+    key: "processing",
+    title: "Printing in progress",
+    description: "The team is preparing and printing your files now.",
+  },
+  {
+    key: "ready",
+    title: "Ready for pickup",
+    description: "Your order is complete and waiting to be collected.",
+  },
+  {
+    key: "delivered",
+    title: "Delivered",
+    description: "The order has been handed over successfully.",
+  },
+];
+
+const formatCurrency = (amount = 0) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(amount) || 0);
+
+const statusBadgeStyles = {
+  pending: "border-amber-400/20 bg-amber-500/10 text-amber-100",
+  processing: "border-blue-400/20 bg-blue-500/10 text-blue-100",
+  ready: "border-violet-400/20 bg-violet-500/10 text-violet-100",
+  delivered: "border-emerald-400/20 bg-emerald-500/10 text-emerald-100",
+};
 
 function Track() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [orderNumber, setOrderNumber] = useState("");
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
-  const handleTrack = async () => {
-    const trimmedOrderNumber = orderNumber.trim();
-    
+  const handleTrack = async (manualOrderNumber) => {
+    const trimmedOrderNumber = (manualOrderNumber ?? orderNumber).trim();
+
     if (!trimmedOrderNumber) {
-      setError("Please enter an Order Number");
+      setError("Please enter an order number.");
       return;
     }
 
@@ -20,30 +76,28 @@ function Track() {
       setLoading(true);
       setError("");
       setOrder(null);
-      
-      // Encode the order number for URL and trim it
+
       const encodedOrderNumber = encodeURIComponent(trimmedOrderNumber);
-      console.log("🔍 Searching for order:", trimmedOrderNumber);
-      
-      const res = await axios.get(`https://print-ease-backend-2121.vercel.app/api/track/${encodedOrderNumber}`);
-      
-      console.log("📦 Response:", res.data);
-      
+      const res = await API.get(`/track/${encodedOrderNumber}`);
+
       if (res.data.success && res.data.order) {
         setOrder(res.data.order);
-        setError("");
+        setNotice(`Showing the latest status for ${trimmedOrderNumber.toUpperCase()}.`);
+        if (searchParams.get("order") !== trimmedOrderNumber) {
+          setSearchParams({ order: trimmedOrderNumber });
+        }
       } else {
-        setOrder(null);
-        setError(res.data.error || "Order not found!");
+        setError(res.data.error || "Order not found.");
       }
     } catch (err) {
-      console.error("❌ Track error:", err);
+      console.error("Track error:", err);
       setOrder(null);
-      const errorMessage = err.response?.data?.error || 
-                          err.response?.data?.message || 
-                          err.message || 
-                          "Order not found! Please check the Order Number and try again.";
-      setError(errorMessage);
+      setError(
+        err.response?.data?.error ||
+          err.response?.data?.message ||
+          err.message ||
+          "Order not found. Please check the order number and try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -53,208 +107,330 @@ function Track() {
     setOrderNumber("");
     setOrder(null);
     setError("");
+    setNotice("");
+    setSearchParams({});
   };
 
-  const getStatusIcon = (status) => {
-    switch(status) {
-      case "delivered":
-        return <CheckCircle className="text-green-600" size={24} />;
-      case "ready":
-        return <Package className="text-blue-600" size={24} />;
-      case "processing":
-        return <Loader2 className="text-yellow-600 animate-spin" size={24} />;
-      default:
-        return <AlertCircle className="text-red-500" size={24} />;
-    }
-  };
+  useEffect(() => {
+    const queryOrder = searchParams.get("order");
 
-  const getStatusColor = (status) => {
-    switch(status) {
-      case "delivered":
-        return "bg-green-100 text-green-700 border-green-300";
-      case "ready":
-        return "bg-blue-100 text-blue-700 border-blue-300";
-      case "processing":
-        return "bg-yellow-100 text-yellow-700 border-yellow-300";
-      default:
-        return "bg-red-100 text-red-700 border-red-300";
+    if (queryOrder && queryOrder !== orderNumber) {
+      setOrderNumber(queryOrder);
+      setNotice("Loaded your latest order number and started tracking it.");
+      handleTrack(queryOrder);
     }
-  };
+  }, [searchParams]);
+
+  const currentStatusIndex = statusOrder.indexOf(order?.orderStatus);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-12 px-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-6 md:mb-10 animate-fade-in">
-          <div className="inline-flex items-center justify-center w-12 h-12 md:w-16 md:h-16 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl mb-3 md:mb-4 shadow-lg">
-            <Search className="text-white" size={24} />
-          </div>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2 md:mb-3 px-2">
-            Track Your Order
-          </h2>
-          <p className="text-gray-600 text-base md:text-lg px-2">Enter your order number to check the status</p>
+    <div className="page-container">
+      <div className="page-header items-center text-center">
+        <div className="mx-auto max-w-4xl">
+          <span className="chip">
+            <Search size={14} />
+            Order Tracking
+          </span>
+          <h1 className="page-title mt-4">Track every print order with less guesswork.</h1>
+          <p className="page-subtitle mt-3">
+            Search by order number to view current status, payment summary, and file
+            details in one clear flow.
+          </p>
         </div>
 
-        {/* Search Box */}
-        <div className="bg-white rounded-xl md:rounded-2xl shadow-xl p-4 md:p-6 lg:p-8 mb-4 md:mb-6 border border-gray-100 animate-scale-in">
-          <div className="flex flex-col sm:flex-row gap-2 md:gap-3">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 md:left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-              <input
-                type="text"
-                placeholder="Enter Order Number"
-                value={orderNumber}
-                onChange={(e) => {
-                  setOrderNumber(e.target.value);
-                  setError("");
-                }}
-                onKeyPress={(e) => e.key === 'Enter' && handleTrack()}
-                className="w-full pl-10 md:pl-12 pr-3 md:pr-4 py-3 md:py-4 rounded-xl border-2 border-gray-200 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 text-sm md:text-base"
-              />
+        <div className="glass-card mx-auto max-w-2xl rounded-[28px] p-5 text-left">
+          <div className="flex items-start gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/12 text-blue-200">
+              <ShieldCheck size={20} />
             </div>
-            <div className="flex gap-2">
+            <div>
+              <p className="text-sm font-semibold text-white">Tracking improvements</p>
+              <p className="mt-1 text-sm leading-6 text-slate-400">
+                Supporting cards now stay in the normal flow, so the page no longer feels
+                right-heavy on larger screens.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <section className="glass-card animate-fade-in rounded-[32px] p-5 md:p-7">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end">
+            <label className="block flex-1">
+              <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                <Search size={14} />
+                Order Number
+              </span>
+              <div className="input-shell flex items-center gap-3 rounded-2xl px-4 py-3.5">
+                <Search className="text-slate-500" size={18} />
+                <input
+                  type="text"
+                  placeholder="Enter order number"
+                  value={orderNumber}
+                  onChange={(event) => {
+                    setOrderNumber(event.target.value);
+                    setError("");
+                    setNotice("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") handleTrack();
+                  }}
+                  className="w-full bg-transparent text-sm outline-none placeholder:text-slate-500"
+                />
+              </div>
+            </label>
+
+            <div className="flex gap-3">
               <button
-                onClick={handleTrack}
+                type="button"
+                onClick={() => handleTrack()}
                 disabled={loading}
-                className={`flex-1 sm:flex-none px-4 md:px-6 py-3 md:py-4 rounded-xl font-semibold text-white transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 text-sm md:text-base ${
-                  loading 
-                    ? "bg-gray-400 cursor-not-allowed" 
-                    : "bg-gradient-to-r from-indigo-600 to-purple-600 hover:scale-[1.02] transform"
+                className={`primary-btn inline-flex min-w-[140px] items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-sm font-semibold ${
+                  loading ? "cursor-not-allowed opacity-70" : ""
                 }`}
               >
                 {loading ? (
                   <>
                     <Loader2 className="animate-spin" size={18} />
-                    <span className="hidden sm:inline">Tracking...</span>
+                    Tracking...
                   </>
                 ) : (
                   <>
                     <Search size={18} />
-                    <span>Track</span>
+                    Track order
                   </>
                 )}
               </button>
+
               {orderNumber && (
                 <button
+                  type="button"
                   onClick={handleReset}
-                  className="px-3 md:px-6 py-3 md:py-4 rounded-xl font-semibold bg-gray-500 text-white hover:bg-gray-600 transition-all duration-200 shadow-lg flex items-center gap-2 text-sm md:text-base"
+                  className="secondary-btn inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-sm font-semibold"
                 >
                   <X size={18} />
-                  <span className="hidden sm:inline">Clear</span>
+                  Clear
                 </button>
               )}
             </div>
           </div>
+
+          {notice && !error && (
+            <div className="mt-5 rounded-2xl border border-blue-400/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-100">
+              {notice}
+            </div>
+          )}
+
           {error && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">
-              <AlertCircle size={18} />
+            <div className="mt-5 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
               {error}
             </div>
           )}
-        </div>
 
-        {/* Order Details */}
-        {order && (
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in">
-            {/* Order Header */}
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white">
-              <div className="flex items-center justify-between flex-wrap gap-4">
-                <div className="flex items-center gap-3">
-                  <Package size={28} />
-                  <div>
-                    <p className="text-sm opacity-90">Order Number</p>
-                    <p className="text-xl font-bold">{order.orderNumber}</p>
-                  </div>
+          {!order && !loading && (
+            <div className="empty-state mt-6 rounded-[28px] p-6 md:p-8">
+              <div className="flex flex-col items-start gap-4 md:flex-row md:items-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900/70 text-blue-200">
+                  <Package size={24} />
                 </div>
-                <div className={`flex items-center gap-2 px-4 py-2 rounded-full bg-white ${getStatusColor(order.orderStatus)}`}>
-                  {getStatusIcon(order.orderStatus)}
-                  <span className="font-semibold capitalize text-sm">{order.orderStatus}</span>
+                <div>
+                  <p className="text-lg font-semibold text-white">No order selected yet</p>
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
+                    Enter an order number above to reveal payment details, current progress,
+                    and the exact files included in that request.
+                  </p>
                 </div>
               </div>
             </div>
+          )}
+        </section>
 
-            {/* Order Content */}
-            <div className="p-4 md:p-6 lg:p-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-3 md:p-4 border border-blue-100">
-                  <div className="flex items-center gap-2 text-gray-600 mb-2">
-                    <Receipt size={16} />
-                    <span className="text-xs md:text-sm font-medium">Total Amount</span>
-                  </div>
-                  <p className="text-2xl md:text-3xl font-bold text-blue-600">₹{order.totalAmount}</p>
-                </div>
-                <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-3 md:p-4 border border-purple-100">
-                  <div className="flex items-center gap-2 text-gray-600 mb-2">
-                    <FileText size={16} />
-                    <span className="text-xs md:text-sm font-medium">Total Pages</span>
-                  </div>
-                  <p className="text-2xl md:text-3xl font-bold text-purple-600">{order.totalPages}</p>
-                </div>
-              </div>
+        <section className="glass-card animate-scale-in rounded-[32px] p-5 md:p-7">
+          <span className="chip">
+            <Clock3 size={14} />
+            Status Guide
+          </span>
 
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 flex items-center justify-between">
-                <span className="text-gray-700 font-medium">Payment Status</span>
-                <span className="bg-green-600 text-white px-4 py-1 rounded-full text-sm font-semibold flex items-center gap-2">
-                  <CheckCircle size={16} />
-                  Paid
-                </span>
-              </div>
+          <div className="status-track mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {statusSteps.map((step, index) => {
+              const isActive = currentStatusIndex >= index;
+              const isCurrent = order?.orderStatus === step.key;
 
-              {order.userId && order.userId.name && (
-                <div className="bg-gray-50 rounded-xl p-4 mb-6 flex items-center gap-3">
-                  <div className="bg-indigo-100 p-2 rounded-lg">
-                    <User className="text-indigo-600" size={20} />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">Customer</p>
-                    <p className="font-semibold text-gray-800">{order.userId.name}</p>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <FileText size={20} />
-                  Files ({order.files?.length || 0})
-                </h3>
-                <div className="space-y-3">
-                  {order.files && order.files.map((file, idx) => (
-                    <div key={idx} className="bg-gray-50 rounded-xl p-4 border border-gray-200 hover:border-indigo-300 transition-all">
-                      <a 
-                        href={file.cloudinaryUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-2 mb-3 group"
-                      >
-                        <Download size={18} className="group-hover:translate-y-1 transition-transform" />
-                        {file.filename}
-                      </a>
-                      <div className="flex flex-wrap gap-2">
-                        <span className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-xs font-medium">
-                          {file.pages} pages
-                        </span>
-                        <span className="bg-green-100 text-green-700 px-3 py-1 rounded-lg text-xs font-medium">
-                          {file.copies} copies
-                        </span>
-                        <span className={`px-3 py-1 rounded-lg text-xs font-medium ${
-                          file.color === 'color' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'
-                        }`}>
-                          {file.color === 'color' ? 'Color ₹5' : 'B&W ₹2'}
-                        </span>
-                        {file.doubleSided && (
-                          <span className="bg-orange-100 text-orange-700 px-3 py-1 rounded-lg text-xs font-medium">
-                            2-Sided
-                          </span>
-                        )}
-                      </div>
+              return (
+                <div
+                  key={step.key}
+                  className={`relative z-10 rounded-[24px] border p-4 ${
+                    isActive
+                      ? "border-blue-400/20 bg-blue-500/10"
+                      : "border-slate-800 bg-slate-950/40"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+                        isActive ? "bg-blue-500 text-white" : "bg-slate-900 text-slate-500"
+                      }`}
+                    >
+                      {isActive ? <CheckCircle2 size={18} /> : <Clock3 size={18} />}
                     </div>
-                  ))}
+                    <div>
+                      <p className="text-sm font-semibold text-white">{step.title}</p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                        {isCurrent ? "Current stage" : `Step ${index + 1}`}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-slate-400">{step.description}</p>
                 </div>
+              );
+            })}
+          </div>
+        </section>
+      </div>
+
+      {order && (
+        <section className="glass-card animate-fade-in mt-6 overflow-hidden rounded-[32px]">
+          <div className="border-b border-slate-800 bg-[linear-gradient(135deg,rgba(37,99,235,0.22),rgba(79,70,229,0.2),rgba(15,23,42,0.95))] px-5 py-6 md:px-7">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-white/8 text-blue-100">
+                  <Package size={26} />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-200">
+                    Order Number
+                  </p>
+                  <h2 className="mt-2 text-2xl font-black tracking-[-0.05em] text-white">
+                    {order.orderNumber}
+                  </h2>
+                </div>
+              </div>
+
+              <div
+                className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold capitalize ${
+                  statusBadgeStyles[order.orderStatus] ||
+                  "border-slate-700 bg-slate-900/60 text-slate-200"
+                }`}
+              >
+                <CheckCircle2 size={16} />
+                {order.orderStatus}
               </div>
             </div>
           </div>
-        )}
-      </div>
+
+          <div className="grid gap-6 p-5 md:p-7 xl:grid-cols-[0.95fr,1.05fr]">
+            <div className="space-y-6">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="soft-card rounded-[24px] p-5">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    <Receipt size={14} />
+                    Total Amount
+                  </div>
+                  <p className="mt-4 text-3xl font-black tracking-[-0.04em] text-white">
+                    {formatCurrency(order.totalAmount)}
+                  </p>
+                </div>
+
+                <div className="soft-card rounded-[24px] p-5">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                    <FileText size={14} />
+                    Total Pages
+                  </div>
+                  <p className="mt-4 text-3xl font-black tracking-[-0.04em] text-white">
+                    {order.totalPages}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-[24px] border border-emerald-400/15 bg-emerald-500/10 p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">
+                      Payment Status
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-white">Paid successfully</p>
+                  </div>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-200">
+                    <CheckCircle2 size={22} />
+                  </div>
+                </div>
+              </div>
+
+              {order.userId?.name && (
+                <div className="soft-card rounded-[24px] p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/12 text-blue-200">
+                      <User size={20} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                        Customer
+                      </p>
+                      <p className="mt-2 text-lg font-semibold text-white">{order.userId.name}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  Files
+                </p>
+                <h3 className="mt-2 text-xl font-black tracking-[-0.04em] text-white">
+                  Included documents ({order.files?.length || 0})
+                </h3>
+              </div>
+
+              <div className="space-y-4">
+                {order.files?.map((file, index) => (
+                  <div key={`${file.filename}-${index}`} className="soft-card rounded-[24px] p-5">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          File {index + 1}
+                        </p>
+                        <h4 className="mt-2 break-words text-base font-semibold text-white">
+                          {file.filename}
+                        </h4>
+                      </div>
+
+                      <a
+                        href={file.cloudinaryUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="secondary-btn inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                      >
+                        <Download size={16} />
+                        Open file
+                      </a>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-100">
+                        {file.pages} pages
+                      </span>
+                      <span className="rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-100">
+                        {file.copies} copies
+                      </span>
+                      <span className="rounded-full bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-100">
+                        {file.color === "color" ? "Color | Rs.5/page" : "B&W | Rs.2/page"}
+                      </span>
+                      {file.doubleSided && (
+                        <span className="rounded-full bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-100">
+                          Double-sided
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

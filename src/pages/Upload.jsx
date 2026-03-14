@@ -1,15 +1,56 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  AlertCircle,
+  BadgeCheck,
+  Copy,
+  CreditCard,
+  FileImage,
+  FileText,
+  FolderOpen,
+  LoaderCircle,
+  ShieldCheck,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 import { PDFDocument } from "pdf-lib";
 
 import API from "../api/api";
 
+const MAX_FILES = 10;
+
+const feedbackStyles = {
+  success: "border-emerald-400/20 bg-emerald-500/10 text-emerald-100",
+  error: "border-rose-400/20 bg-rose-500/10 text-rose-100",
+  warning: "border-amber-400/20 bg-amber-500/10 text-amber-100",
+  info: "border-blue-400/20 bg-blue-500/10 text-blue-100",
+};
+
+const createItemId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const formatFileSize = (bytes) =>
+  bytes < 1024 * 1024
+    ? `${(bytes / 1024).toFixed(1)} KB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+const formatCurrency = (amount = 0) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(amount) || 0);
+
 function Upload() {
-  const [files, setFiles] = useState([]);
-  const [filePages, setFilePages] = useState({});
-  const [fileCopies, setFileCopies] = useState({});
-  const [fileColor, setFileColor] = useState({});
-  const [fileDoubleSided, setFileDoubleSided] = useState({});
+  const navigate = useNavigate();
+  const fileInputRef = useRef(null);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [message, setMessage] = useState(null);
+  const [processingLabel, setProcessingLabel] = useState("");
+  const [completedOrder, setCompletedOrder] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const getPDFPageCount = async (file) => {
     if (file.type !== "application/pdf") return 1;
@@ -24,101 +65,145 @@ function Upload() {
     }
   };
 
-  const handleFileChange = async (e) => {
-    const selectedFiles = Array.from(e.target.files);
-    setFiles(selectedFiles);
+  const clearSelection = (preserveCompletedOrder = false) => {
+    setItems([]);
+    if (!preserveCompletedOrder) {
+      setCompletedOrder(null);
+    }
+    setProcessingLabel("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
-    const pagesObj = {};
-    const copiesObj = {};
-    const colorObj = {};
-    const doubleSidedObj = {};
+  const addFiles = async (incomingFiles) => {
+    const selectedFiles = Array.from(incomingFiles || []).filter(Boolean);
+    if (!selectedFiles.length) return;
 
-    for (let i = 0; i < selectedFiles.length; i += 1) {
-      const pageCount = await getPDFPageCount(selectedFiles[i]);
-      pagesObj[i] = pageCount;
-      copiesObj[i] = 1;
-      colorObj[i] = "color";
-      doubleSidedObj[i] = false;
+    const remainingSlots = MAX_FILES - items.length;
+
+    if (remainingSlots <= 0) {
+      setMessage({
+        type: "warning",
+        title: "Upload limit reached",
+        detail: `You can add up to ${MAX_FILES} files in one order.`,
+      });
+      return;
     }
 
-    setFilePages(pagesObj);
-    setFileCopies(copiesObj);
-    setFileColor(colorObj);
-    setFileDoubleSided(doubleSidedObj);
+    const acceptedFiles = selectedFiles.slice(0, remainingSlots);
+
+    setAnalyzing(true);
+    setCompletedOrder(null);
+    setMessage({
+      type: "info",
+      title: "Preparing your files",
+      detail: "Checking page counts and getting your print settings ready.",
+    });
+
+    try {
+      const nextItems = [];
+
+      for (const file of acceptedFiles) {
+        const detectedPages = await getPDFPageCount(file);
+        nextItems.push({
+          id: createItemId(),
+          file,
+          pages: detectedPages,
+          copies: 1,
+          color: "color",
+          doubleSided: false,
+          detectedPages,
+        });
+      }
+
+      setItems((currentItems) => [...currentItems, ...nextItems]);
+      setMessage({
+        type: "success",
+        title: `${nextItems.length} file${nextItems.length > 1 ? "s" : ""} ready`,
+        detail:
+          selectedFiles.length > acceptedFiles.length
+            ? `Only ${acceptedFiles.length} file(s) were added because one order supports ${MAX_FILES} files.`
+            : "Adjust settings below and continue to secure checkout.",
+      });
+    } catch (error) {
+      console.error("File preparation error:", error);
+      setMessage({
+        type: "error",
+        title: "Could not prepare files",
+        detail: "Please try selecting the files again.",
+      });
+    } finally {
+      setAnalyzing(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
-  const removeFile = (index) => {
-    const remainingFiles = files.filter((_, i) => i !== index);
-    const reindexState = (state) =>
-      remainingFiles.reduce((acc, _, newIndex) => {
-        const oldIndex = newIndex >= index ? newIndex + 1 : newIndex;
-
-        if (state[oldIndex] !== undefined) {
-          acc[newIndex] = state[oldIndex];
-        }
-
-        return acc;
-      }, {});
-
-    setFiles(remainingFiles);
-    setFilePages(reindexState(filePages));
-    setFileCopies(reindexState(fileCopies));
-    setFileColor(reindexState(fileColor));
-    setFileDoubleSided(reindexState(fileDoubleSided));
+  const updateItem = (id, field, value) => {
+    setItems((currentItems) =>
+      currentItems.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              [field]:
+                field === "pages" || field === "copies"
+                  ? Math.max(1, Number.parseInt(value, 10) || 1)
+                  : value,
+            }
+          : item
+      )
+    );
   };
 
-  const handlePagesChange = (index, pages) => {
-    setFilePages({ ...filePages, [index]: Number.parseInt(pages, 10) || 1 });
+  const removeItem = (id) => {
+    setItems((currentItems) => currentItems.filter((item) => item.id !== id));
   };
 
-  const handleCopiesChange = (index, copies) => {
-    setFileCopies({ ...fileCopies, [index]: Number.parseInt(copies, 10) || 1 });
-  };
+  const getItemTotal = (item) =>
+    item.pages * item.copies * (item.color === "color" ? 5 : 2);
 
-  const handleColorChange = (index, color) => {
-    setFileColor({ ...fileColor, [index]: color });
-  };
+  const getItemSheets = (item) =>
+    (item.doubleSided ? Math.ceil(item.pages / 2) : item.pages) * item.copies;
 
-  const handleDoubleSidedChange = (index, doubleSided) => {
-    setFileDoubleSided({ ...fileDoubleSided, [index]: doubleSided });
-  };
+  const totalAmount = items.reduce((sum, item) => sum + getItemTotal(item), 0);
+  const totalPages = items.reduce((sum, item) => sum + item.pages * item.copies, 0);
+  const totalSheets = items.reduce((sum, item) => sum + getItemSheets(item), 0);
 
-  const buildFilesData = () =>
-    files.map((file, index) => ({
-      name: file.name,
-      pages: filePages[index] || 1,
-      copies: fileCopies[index] || 1,
-      color: fileColor[index] || "color",
-      doubleSided: fileDoubleSided[index] || false,
-    }));
+  const handleUpload = async (event) => {
+    event.preventDefault();
 
-  const calculateTotalAmount = () =>
-    files.reduce((sum, file, index) => {
-      const pages = filePages[index] || 1;
-      const copies = fileCopies[index] || 1;
-      const color = fileColor[index] || "color";
-      const pricePerPage = color === "color" ? 5 : 2;
-      return sum + pages * copies * pricePerPage;
-    }, 0);
-
-  const handleUpload = async (e) => {
-    e.preventDefault();
-
-    if (files.length === 0) {
-      alert("Please select at least one file.");
+    if (!items.length) {
+      setMessage({
+        type: "warning",
+        title: "Add a file first",
+        detail: "Upload at least one document before checkout.",
+      });
       return;
     }
 
     if (typeof window.Razorpay === "undefined") {
-      alert("Razorpay checkout is not loaded. Please refresh and try again.");
+      setMessage({
+        type: "error",
+        title: "Checkout is unavailable",
+        detail: "Razorpay did not load. Refresh and try again.",
+      });
       return;
     }
 
-    const formElement = e.currentTarget;
-    const filesData = buildFilesData();
+    const filesData = items.map((item) => ({
+      name: item.file.name,
+      pages: item.pages,
+      copies: item.copies,
+      color: item.color,
+      doubleSided: item.doubleSided,
+    }));
 
     try {
       setLoading(true);
+      setProcessingLabel("Preparing secure checkout...");
+      setMessage({
+        type: "info",
+        title: "Creating payment session",
+        detail: "Your print configuration is being sent to secure checkout.",
+      });
 
       const paymentOrderRes = await API.post("/payments/order", { filesData });
       const paymentOrder = paymentOrderRes.data;
@@ -132,14 +217,15 @@ function Upload() {
         amount: paymentOrder.order.amount,
         currency: paymentOrder.order.currency,
         name: "PrintEase",
-        description: `Print Order - ${files.length} file(s)`,
+        description: `Print Order - ${items.length} file(s)`,
         order_id: paymentOrder.order.id,
         handler: async (response) => {
           try {
+            setProcessingLabel("Verifying payment and uploading files...");
             const formData = new FormData();
 
-            files.forEach((file) => {
-              formData.append("files", file);
+            items.forEach((item) => {
+              formData.append("files", item.file);
             });
 
             formData.append("filesData", JSON.stringify(filesData));
@@ -153,28 +239,34 @@ function Upload() {
               throw new Error("Order creation failed after payment.");
             }
 
-            alert(
-              `Payment successful.\nOrder Number: ${uploadRes.data.order.orderNumber}\nPayment ID: ${response.razorpay_payment_id}`
-            );
+            const order = {
+              ...uploadRes.data.order,
+              paymentId: response.razorpay_payment_id,
+            };
 
-            setFiles([]);
-            setFilePages({});
-            setFileCopies({});
-            setFileColor({});
-            setFileDoubleSided({});
-            formElement.reset();
+            setCompletedOrder(order);
+            setMessage({
+              type: "success",
+              title: "Order placed successfully",
+              detail: `Order ${order.orderNumber} is now in processing.`,
+            });
+            clearSelection(true);
           } catch (uploadErr) {
             console.error("Upload error:", uploadErr);
-
             const uploadMessage =
               uploadErr.response?.data?.message ||
               uploadErr.response?.data?.error ||
               uploadErr.message ||
-              "Payment was captured but upload failed.";
+              "Payment was captured but the order could not be created.";
 
-            alert(`${uploadMessage}\nPayment ID: ${response.razorpay_payment_id}`);
+            setMessage({
+              type: "warning",
+              title: "Payment completed, but setup needs attention",
+              detail: `${uploadMessage} Payment ID: ${response.razorpay_payment_id}`,
+            });
           } finally {
             setLoading(false);
+            setProcessingLabel("");
           }
         },
         prefill: {
@@ -182,219 +274,462 @@ function Upload() {
           contact: "9999999999",
           email: "",
         },
-        theme: {
-          color: "#3399cc",
-        },
+        theme: { color: "#4f46e5" },
         modal: {
           ondismiss: () => {
             setLoading(false);
+            setProcessingLabel("");
+            setMessage((currentMessage) =>
+              currentMessage?.type === "success"
+                ? currentMessage
+                : {
+                    type: "warning",
+                    title: "Checkout closed",
+                    detail: "Your files are still here. Review them and try again when ready.",
+                  }
+            );
           },
         },
       };
 
-      const rzp = new window.Razorpay(options);
+      const razorpay = new window.Razorpay(options);
 
-      rzp.on("payment.failed", (response) => {
-        console.error("Payment failed:", response.error);
-        alert(`Payment failed.\n${response.error.description}`);
+      razorpay.on("payment.failed", (response) => {
+        setMessage({
+          type: "error",
+          title: "Payment failed",
+          detail: response.error.description || "Please try again with another method.",
+        });
         setLoading(false);
+        setProcessingLabel("");
       });
 
-      rzp.on("payment.authorized", (response) => {
-        console.log("Payment authorized:", response);
-      });
-
-      rzp.on("error", (error) => {
-        console.error("Razorpay error:", error);
-        alert(`Razorpay error: ${error.description || "Unknown error"}`);
+      razorpay.on("error", (error) => {
+        setMessage({
+          type: "error",
+          title: "Checkout error",
+          detail: error.description || "Something went wrong while opening payment.",
+        });
         setLoading(false);
+        setProcessingLabel("");
       });
 
-      rzp.open();
-    } catch (err) {
-      console.error("Payment start error:", err);
-
-      const message =
-        err.response?.data?.message ||
-        err.response?.data?.error ||
-        err.message ||
+      setProcessingLabel("Waiting for payment confirmation...");
+      razorpay.open();
+    } catch (error) {
+      console.error("Payment start error:", error);
+      const errorMessage =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
         "Unable to start payment.";
 
-      alert(message);
+      setMessage({
+        type: "error",
+        title: "Could not start checkout",
+        detail: errorMessage,
+      });
       setLoading(false);
+      setProcessingLabel("");
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-12 px-4">
-      <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-6 md:mb-8 animate-fade-in">
-          <div className="inline-flex items-center justify-center w-12 h-12 md:w-16 md:h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl mb-3 md:mb-4 shadow-lg">
-            <svg className="text-white" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-              <polyline points="17 8 12 3 7 8"></polyline>
-              <line x1="12" y1="3" x2="12" y2="15"></line>
-            </svg>
-          </div>
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2 md:mb-3 px-2">
-            Upload Documents
-          </h2>
-          <p className="text-gray-600 text-base md:text-lg px-2">Upload your files and customize print settings</p>
-        </div>
+    <div className="page-container">
+      <div className="grid gap-6 lg:grid-cols-[1.25fr,0.75fr]">
+          <section className="space-y-6">
+            <div className="glass-card rounded-[32px] p-6 md:p-8">
+              <span className="chip">
+                Upload Flow
+              </span>
+              <h1 className="mt-4 max-w-3xl text-4xl font-black tracking-[-0.06em] text-white md:text-5xl">
+                Upload, configure, and pay without losing context.
+              </h1>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 md:text-base">
+                Add files, fine-tune copies and print mode, and review everything in a live
+                summary before you pay.
+              </p>
 
-        <div className="bg-white rounded-xl md:rounded-2xl shadow-2xl border border-gray-100 p-4 md:p-6 lg:p-8 animate-scale-in">
-          <form onSubmit={handleUpload} className="space-y-6">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                Select Files (PDF, DOCX, JPG, PNG)
-              </label>
-              <div className="relative">
-                <input
-                  type="file"
-                  accept=".pdf,.docx,.jpg,.png"
-                  onChange={handleFileChange}
-                  multiple
-                  className="w-full border-2 border-dashed border-gray-300 rounded-xl p-6 hover:border-blue-400 transition-colors cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
-              </div>
-
-              {files.length > 0 && (
-                <div className="mt-6 space-y-3">
-                  <p className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                      <polyline points="14 2 14 8 20 8"></polyline>
-                    </svg>
-                    Selected Files ({files.length})
-                  </p>
-
-                  {files.map((file, index) => (
-                    <div key={index} className="bg-gradient-to-br from-gray-50 to-blue-50 p-4 rounded-xl border border-gray-200 hover:border-blue-300 transition-all space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <div className="bg-blue-100 p-2 rounded-lg">
-                            <svg className="text-blue-600" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                              <polyline points="14 2 14 8 20 8"></polyline>
-                            </svg>
-                          </div>
-                          <span className="text-sm font-medium text-gray-800 truncate">{file.name}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeFile(index)}
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-all ml-2"
-                        >
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                          </svg>
-                        </button>
-                      </div>
-
-                      <div className="space-y-2 md:space-y-3 pt-2 border-t border-gray-200">
-                        <div className="grid grid-cols-2 gap-2 md:gap-3">
-                          <div>
-                            <label className="text-[10px] md:text-xs font-semibold text-gray-600 mb-1 block">Pages</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={filePages[index] || 1}
-                              onChange={(event) => handlePagesChange(index, event.target.value)}
-                              className="w-full border-2 border-gray-200 p-1.5 md:p-2 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-xs md:text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] md:text-xs font-semibold text-gray-600 mb-1 block">Copies</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={fileCopies[index] || 1}
-                              onChange={(event) => handleCopiesChange(index, event.target.value)}
-                              className="w-full border-2 border-gray-200 p-1.5 md:p-2 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-xs md:text-sm"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 md:gap-3">
-                          <div className="flex-1 w-full sm:w-auto min-w-[120px]">
-                            <label className="text-[10px] md:text-xs font-semibold text-gray-600 mb-1 block">Print Type</label>
-                            <select
-                              value={fileColor[index] || "color"}
-                              onChange={(event) => handleColorChange(index, event.target.value)}
-                              className="w-full border-2 border-gray-200 p-1.5 md:p-2 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-xs md:text-sm"
-                            >
-                              <option value="color">Color Rs.5/page</option>
-                              <option value="bw">B&amp;W Rs.2/page</option>
-                            </select>
-                          </div>
-
-                          <label className="flex items-center gap-2 mt-4 sm:mt-6 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={fileDoubleSided[index] || false}
-                              onChange={(event) => handleDoubleSidedChange(index, event.target.checked)}
-                              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            />
-                            <span className="text-xs md:text-sm font-medium text-gray-700">2-Sided</span>
-                          </label>
-
-                          <div className="bg-blue-100 px-3 md:px-4 py-1.5 md:py-2 rounded-lg w-full sm:w-auto sm:ml-auto">
-                            <span className="text-xs md:text-sm font-bold text-blue-700">
-                              Rs.
-                              {((filePages[index] || 1) * (fileCopies[index] || 1) * ((fileColor[index] || "color") === "color" ? 5 : 2))}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+              <div className="mt-8 grid gap-4 sm:grid-cols-3">
+                <div className="soft-card rounded-[24px] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">Step 1</p>
+                  <p className="mt-3 text-lg font-bold text-white">Add files</p>
+                  <p className="mt-1 text-sm text-slate-400">PDF pages are detected automatically.</p>
                 </div>
-              )}
+                <div className="soft-card rounded-[24px] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-200">Step 2</p>
+                  <p className="mt-3 text-lg font-bold text-white">Tune settings</p>
+                  <p className="mt-1 text-sm text-slate-400">Cost updates instantly while you edit.</p>
+                </div>
+                <div className="soft-card rounded-[24px] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200">Step 3</p>
+                  <p className="mt-3 text-lg font-bold text-white">Pay securely</p>
+                  <p className="mt-1 text-sm text-slate-400">Orders save only after payment verification.</p>
+                </div>
+              </div>
             </div>
 
-            {files.length > 0 && (
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 md:p-6 rounded-xl text-white shadow-lg">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2 gap-2">
-                  <span className="text-xs md:text-sm opacity-90">Total Amount</span>
-                  <span className="text-2xl md:text-3xl font-bold">Rs.{calculateTotalAmount().toFixed(2)}</span>
+            {message && (
+              <div className={`flex gap-3 rounded-[24px] border px-4 py-4 ${feedbackStyles[message.type]}`}>
+                <div className="mt-0.5">
+                  {message.type === "success" ? <BadgeCheck size={18} /> : <AlertCircle size={18} />}
                 </div>
-                <p className="text-[10px] md:text-xs opacity-75">
-                  {files.length} file(s) | Color: Rs.5/page | B&amp;W: Rs.2/page
-                </p>
+                <div className="flex-1">
+                  <p className="font-semibold">{message.title}</p>
+                  <p className="mt-1 text-sm leading-6 opacity-90">{message.detail}</p>
+                </div>
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={loading || files.length === 0}
-              className={`w-full py-4 rounded-xl text-white font-semibold transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 ${
-                loading || files.length === 0
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:scale-[1.02] transform"
-              }`}
-            >
-              {loading ? (
-                <>
-                  <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
-                    <line x1="1" y1="10" x2="23" y2="10"></line>
-                  </svg>
-                  Proceed to Payment
-                </>
-              )}
-            </button>
-          </form>
+            {completedOrder && (
+              <div className="glass-card rounded-[32px] p-6 md:p-7">
+                <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <span className="chip">
+                      Order confirmed
+                    </span>
+                    <h2 className="mt-4 text-2xl font-black tracking-[-0.04em] text-white">
+                      Your print request is now in the queue.
+                    </h2>
+                    <p className="mt-2 text-sm leading-6 text-slate-400">
+                      Save the order number for quick tracking.
+                    </p>
+                  </div>
+                  <div className="rounded-[24px] border border-slate-800 bg-slate-950/70 px-5 py-4 text-white">
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Order number</p>
+                    <p className="mt-2 text-xl font-black">{completedOrder.orderNumber}</p>
+                    <p className="mt-2 text-xs text-slate-500">Payment ID: {completedOrder.paymentId}</p>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/track?order=${encodeURIComponent(completedOrder.orderNumber)}`)}
+                    className="primary-btn inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold"
+                  >
+                    Track this order
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(completedOrder.orderNumber);
+                        setMessage({
+                          type: "success",
+                          title: "Order number copied",
+                          detail: "You can paste it anywhere you need for tracking.",
+                        });
+                      } catch (error) {
+                        setMessage({
+                          type: "warning",
+                          title: "Copy did not work",
+                          detail: "Please copy the order number manually from the success card.",
+                        });
+                      }
+                    }}
+                    className="secondary-btn inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold"
+                  >
+                    <Copy size={16} />
+                    Copy order number
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleUpload} className="glass-card rounded-[32px] p-5 md:p-7">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="text-2xl font-black tracking-[-0.04em] text-white">Add and configure your files</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">
+                    Accepted formats: PDF, DOCX, JPG, JPEG, PNG. Up to {MAX_FILES} files.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="secondary-btn inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                  >
+                    <FolderOpen size={16} />
+                    {items.length ? "Add more" : "Choose files"}
+                  </button>
+                  {items.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearSelection}
+                      className="danger-btn inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold"
+                    >
+                      <Trash2 size={16} />
+                      Clear all
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,.jpg,.jpeg,.png"
+                multiple
+                className="hidden"
+                onChange={(event) => addFiles(event.target.files)}
+              />
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setIsDragging(true);
+                }}
+                onDragLeave={(event) => {
+                  event.preventDefault();
+                  setIsDragging(false);
+                }}
+                onDrop={async (event) => {
+                  event.preventDefault();
+                  setIsDragging(false);
+                  await addFiles(event.dataTransfer.files);
+                }}
+                className={`mt-6 flex w-full flex-col items-center justify-center rounded-[30px] border-2 border-dashed px-6 py-12 text-center transition-all ${
+                  isDragging
+                    ? "border-blue-400 bg-blue-500/10 shadow-[0_0_0_4px_rgba(59,130,246,0.12)]"
+                    : "border-slate-700 bg-slate-950/35 hover:border-blue-400/60 hover:bg-blue-500/6"
+                }`}
+              >
+                <div className="flex h-16 w-16 items-center justify-center rounded-[24px] bg-[linear-gradient(135deg,#2563eb,#4f46e5,#7c3aed)] text-white shadow-[0_20px_45px_rgba(79,70,229,0.3)]">
+                  {analyzing ? <LoaderCircle className="animate-spin" size={28} /> : <UploadCloud size={28} />}
+                </div>
+                <h3 className="mt-5 text-xl font-bold text-white">
+                  {analyzing ? "Analyzing your files..." : "Drop files here or browse your device"}
+                </h3>
+                <p className="mt-3 max-w-xl text-sm leading-7 text-slate-400">
+                  {analyzing
+                    ? "This usually takes a moment while we count PDF pages."
+                    : "Each file gets its own print controls, preview context, and live price updates."}
+                </p>
+              </button>
+
+              <div className="mt-6 space-y-4">
+                {items.map((item, index) => {
+                  const FileIcon = item.file.type.startsWith("image/") ? FileImage : FileText;
+
+                  return (
+                    <div key={item.id} className="soft-card rounded-[28px] p-4 md:p-5">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="flex items-start gap-4">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-500/12 text-blue-200">
+                            <FileIcon size={22} />
+                          </div>
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-slate-900/70 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+                                File {index + 1}
+                              </span>
+                              <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-100">
+                                {item.file.type === "application/pdf" ? `${item.detectedPages} detected pages` : "Default 1 page"}
+                              </span>
+                            </div>
+                            <h3 className="mt-2 break-words text-base font-bold text-white md:text-lg">{item.file.name}</h3>
+                            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">{formatFileSize(item.file.size)}</p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.id)}
+                          className="danger-btn inline-flex items-center gap-2 self-start rounded-2xl px-3 py-2 text-sm font-semibold"
+                        >
+                          <Trash2 size={16} />
+                          Remove
+                        </button>
+                      </div>
+
+                      <div className="mt-5 grid gap-4 lg:grid-cols-4">
+                        <label className="rounded-[22px] border border-slate-800 bg-slate-950/35 p-3">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Pages</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.pages}
+                            onChange={(event) => updateItem(item.id, "pages", event.target.value)}
+                            className="input-shell mt-2 w-full rounded-xl px-3 py-2.5 text-sm font-semibold"
+                          />
+                        </label>
+
+                        <label className="rounded-[22px] border border-slate-800 bg-slate-950/35 p-3">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Copies</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.copies}
+                            onChange={(event) => updateItem(item.id, "copies", event.target.value)}
+                            className="input-shell mt-2 w-full rounded-xl px-3 py-2.5 text-sm font-semibold"
+                          />
+                        </label>
+
+                        <label className="rounded-[22px] border border-slate-800 bg-slate-950/35 p-3">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Print type</span>
+                          <select
+                            value={item.color}
+                            onChange={(event) => updateItem(item.id, "color", event.target.value)}
+                            className="input-shell mt-2 w-full rounded-xl px-3 py-2.5 text-sm font-semibold"
+                          >
+                            <option value="color">Color - Rs.5 per page</option>
+                            <option value="bw">B&W - Rs.2 per page</option>
+                          </select>
+                        </label>
+
+                        <div className="rounded-[22px] border border-slate-800 bg-slate-950/35 p-3">
+                          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Duplex</span>
+                          <label className="mt-3 flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/55 px-3 py-2.5 text-sm font-semibold text-slate-200">
+                            <span>Print both sides</span>
+                            <input
+                              type="checkbox"
+                              checked={item.doubleSided}
+                              onChange={(event) => updateItem(item.id, "doubleSided", event.target.checked)}
+                              className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-blue-500 focus:ring-blue-500"
+                            />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-blue-500/10 px-3 py-1.5 text-xs font-semibold text-blue-100">
+                          {item.pages * item.copies} print pages
+                        </span>
+                        <span className="rounded-full bg-violet-500/10 px-3 py-1.5 text-xs font-semibold text-violet-100">
+                          About {getItemSheets(item)} sheet{getItemSheets(item) > 1 ? "s" : ""}
+                        </span>
+                        <span className="rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white">
+                          {formatCurrency(getItemTotal(item))}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {items.length === 0 && (
+                  <div className="empty-state rounded-[28px] p-6 text-center">
+                    <p className="text-sm font-semibold text-white">No files added yet</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-400">
+                      Once you add files, each document gets its own print controls and price line.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3 rounded-[28px] border border-slate-800 bg-slate-950/40 p-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-white">Ready for checkout?</p>
+                  <p className="mt-1 text-sm text-slate-400">You can still edit settings until the payment window opens.</p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || analyzing || items.length === 0}
+                  className={`inline-flex min-w-[220px] items-center justify-center gap-2 rounded-2xl px-5 py-3.5 text-sm font-semibold text-white transition ${
+                    loading || analyzing || items.length === 0
+                      ? "cursor-not-allowed bg-slate-700/80"
+                      : "primary-btn"
+                  }`}
+                >
+                  {loading ? (
+                    <>
+                      <LoaderCircle className="animate-spin" size={18} />
+                      {processingLabel || "Processing..."}
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard size={18} />
+                      Proceed to payment
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <aside className="lg:sticky lg:top-24">
+            <div className="glass-card overflow-hidden rounded-[32px]">
+              <div className="border-b border-slate-800 bg-[linear-gradient(135deg,rgba(37,99,235,0.18),rgba(79,70,229,0.22),rgba(15,23,42,0.95))] p-6 text-white">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-200">Live order summary</p>
+                <div className="mt-4 flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-blue-100">Estimated total</p>
+                    <p className="mt-1 text-4xl font-black tracking-tight">{formatCurrency(totalAmount)}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-right backdrop-blur">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-blue-100">Files</p>
+                    <p className="text-2xl font-black">{items.length}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4 p-6">
+                <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                  <div className="soft-card rounded-[24px] p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Print pages</p>
+                    <p className="mt-2 text-2xl font-black text-white">{totalPages}</p>
+                  </div>
+                  <div className="soft-card rounded-[24px] p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Estimated sheets</p>
+                    <p className="mt-2 text-2xl font-black text-white">{totalSheets}</p>
+                  </div>
+                  <div className="soft-card rounded-[24px] p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Payment status</p>
+                    <p className="mt-2 text-sm font-bold text-white">{loading ? "In progress" : "Not paid yet"}</p>
+                  </div>
+                </div>
+
+                <div className="soft-card rounded-[24px] p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-500/12 text-blue-200">
+                      <ShieldCheck size={18} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-white">Checkout confidence</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-400">
+                        Secure payment through Razorpay, with backend signature verification before order creation.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">Cost breakdown</h3>
+                  <div className="mt-3 space-y-3">
+                    {items.length === 0 ? (
+                      <div className="empty-state rounded-[24px] p-5 text-sm leading-6">
+                        Add files to see a clean cost breakdown here before payment.
+                      </div>
+                    ) : (
+                      items.map((item) => (
+                        <div key={item.id} className="soft-card rounded-[24px] p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="line-clamp-2 text-sm font-semibold text-white">{item.file.name}</p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {item.pages} page{item.pages > 1 ? "s" : ""} x {item.copies} cop
+                                {item.copies > 1 ? "ies" : "y"} | {item.color === "color" ? "Color" : "B&W"}
+                              </p>
+                            </div>
+                            <span className="text-sm font-black text-white">{formatCurrency(getItemTotal(item))}</span>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
         </div>
-      </div>
     </div>
   );
 }
